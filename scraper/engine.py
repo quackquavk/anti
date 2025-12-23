@@ -190,14 +190,22 @@ class ScraperEngine:
             print(f"  Warning: Detail pane title didn't match '{name}' within 5s. Proceeding anyway.")
             await asyncio.sleep(2) # Fallback sleep
         
-        # Category and address might also be useful
+        # Category and address extraction
         category = None
         address = None
         try:
-            category_btn = await page.query_selector('button[data-item-id="address"]')
-            if category_btn: address = await category_btn.inner_text()
+            # Address is usually in a button with data-item-id="address"
+            # We want the inner text, but sometimes it contains icons. 
+            # We can try to get the aria-label or specific div inside it if possible.
+            address_btn = await page.query_selector('button[data-item-id="address"]')
+            if address_btn:
+                # Often the address is in a div with class "Io6YTe" inside the button
+                address_text_el = await address_btn.query_selector('.Io6YTe')
+                if address_text_el:
+                    address = await address_text_el.inner_text()
+                else:
+                    address = await address_btn.inner_text()
             
-            # Category is often just text near the title
             category_el = await page.query_selector('button[jsaction*="category"]')
             if category_el: category = await category_el.inner_text()
         except: pass
@@ -252,17 +260,24 @@ class ScraperEngine:
         if final_phone: self.log_callback(f"  SUCCESS: Phone {final_phone}")
 
         try:
+            # More robust share button finding
             share_btn = await page.query_selector('button[data-value="Share"]')
             if not share_btn: share_btn = await page.query_selector('button[aria-label*="Share"]')
-            if not share_btn: share_btn = await page.query_selector('button:has(span[class*="google-symbols"])')
-
+            
             if share_btn:
                 await share_btn.click()
+                # Wait for the share dialog to appear and the link to be populated
+                # The input usually has class 'vrsrZe'
                 try:
-                    await page.wait_for_selector('input.vrsrZe', timeout=3000)
+                    await page.wait_for_selector('input[readonly][value^="https://maps.app.goo.gl"]', timeout=5000)
+                    link_input = await page.query_selector('input[readonly]')
+                    if link_input: share_link = await link_input.get_attribute("value")
+                except:
+                    # Fallback for input selector
                     link_input = await page.query_selector('input.vrsrZe')
                     if link_input: share_link = await link_input.get_attribute("value")
-                except: pass
+                
+                # Close the dialog
                 await page.keyboard.press("Escape")
                 await asyncio.sleep(0.5)
         except: pass
