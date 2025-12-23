@@ -168,9 +168,40 @@ class ScraperEngine:
         
         self.log_callback(f"Processing {i+1}/{total}: {name}")
         
+        # Scroll item into view before clicking (sometimes helps with stale elements)
+        try:
+            await el.scroll_into_view_if_needed()
+        except: pass
+
         await el.click()
-        await asyncio.sleep(2) 
         
+        # WAIT for the detail pane to update. 
+        # We look for the main heading (h1.DUwDvf) and wait for it to contain the name.
+        try:
+            # We give it up to 5 seconds to update the header
+            # We use a relaxed match because names might have slight variations (e.g. truncated)
+            detail_title_selector = "h1.DUwDvf"
+            await page.wait_for_function(
+                f"(name) => document.querySelector('{detail_title_selector}')?.innerText.includes(name)",
+                name[:10], # Match first 10 chars to be safe against truncation
+                timeout=5000
+            )
+        except:
+            print(f"  Warning: Detail pane title didn't match '{name}' within 5s. Proceeding anyway.")
+            await asyncio.sleep(2) # Fallback sleep
+        
+        # Category and address might also be useful
+        category = None
+        address = None
+        try:
+            category_btn = await page.query_selector('button[data-item-id="address"]')
+            if category_btn: address = await category_btn.inner_text()
+            
+            # Category is often just text near the title
+            category_el = await page.query_selector('button[jsaction*="category"]')
+            if category_el: category = await category_el.inner_text()
+        except: pass
+
         website = None
         try:
             website_btn = await page.query_selector('a[data-item-id="authority"]')
@@ -238,6 +269,8 @@ class ScraperEngine:
 
         return {
             "name": name,
+            "category": category,
+            "address": address,
             "website": website,
             "email": email,
             "phone": final_phone,
