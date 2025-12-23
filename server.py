@@ -70,9 +70,6 @@ def save_job_results(job_id, results):
 async def run_scraper_async(job_id, config):
     """Async scraping logic for a specific job."""
     
-    scraper = ScraperEngine(headless=config.get("headless", True))
-    grid_gen = GridGenerator()
-    
     all_results = []
     unique_ids = set()
     
@@ -81,6 +78,37 @@ async def run_scraper_async(job_id, config):
     total_target = config.get("total", 10)
     grid_size = config.get("grid_size", 3)
     zoom_level = min(config.get("zoom_level", 15), 21)
+    
+    # Callbacks for real-time updates
+    def log_cb(message):
+        log_to_job(job_id, message)
+    
+    def result_cb(result, current_count, total):
+        # Add to our local tracking with deduplication
+        name_clean = (result['name'] or "").lower().strip()
+        phone_clean = (result['phone'] or "").strip()
+        website_clean = (result['website'] or "").strip()
+        
+        if phone_clean:
+            key = f"{name_clean}|{phone_clean}"
+        elif website_clean:
+            key = f"{name_clean}|{website_clean}"
+        else:
+            raw_snippet = (result.get('raw_text') or "")[:20].lower().strip()
+            key = f"{name_clean}|{raw_snippet}"
+        
+        if key not in unique_ids:
+            unique_ids.add(key)
+            all_results.append(result)
+            # Save to MongoDB immediately
+            save_job_results(job_id, all_results)
+    
+    scraper = ScraperEngine(
+        headless=config.get("headless", True),
+        log_callback=log_cb,
+        result_callback=result_cb
+    )
+    grid_gen = GridGenerator()
     
     # Check if job is still active (not stopped)
     def is_job_active():
@@ -97,9 +125,8 @@ async def run_scraper_async(job_id, config):
             if not coords:
                 log_to_job(job_id, "Failed to find coordinates. Using simple query.")
                 full_query = f"{search_query} in {location}"
-                results = await scraper.run(full_query, total_target)
-                save_job_results(job_id, results)
-                update_job_status(job_id, "completed", len(results))
+                await scraper.run(full_query, total_target)
+                update_job_status(job_id, "completed", len(all_results))
                 return
             
             lat, lon = coords
@@ -124,40 +151,16 @@ async def run_scraper_async(job_id, config):
                 batch_target = min(remaining, 500)
                 
                 try:
-                    batch_results = await scraper.run(search_query, batch_target, lat=g_lat, lon=g_lon, zoom=zoom_level)
-                    
-                    new_count = 0
-                    for item in batch_results:
-                        name_clean = (item['name'] or "").lower().strip()
-                        phone_clean = (item['phone'] or "").strip()
-                        website_clean = (item['website'] or "").strip()
-                        
-                        if phone_clean:
-                            key = f"{name_clean}|{phone_clean}"
-                        elif website_clean:
-                            key = f"{name_clean}|{website_clean}"
-                        else:
-                            raw_snippet = (item.get('raw_text') or "")[:20].lower().strip()
-                            key = f"{name_clean}|{raw_snippet}"
-                        
-                        if key not in unique_ids:
-                            unique_ids.add(key)
-                            all_results.append(item)
-                            new_count += 1
-                    
-                    log_to_job(job_id, f"  Scraped: {len(batch_results)}, New: {new_count}, Total: {len(all_results)}")
-                    save_job_results(job_id, all_results)
-                    
+                    await scraper.run(search_query, batch_target, lat=g_lat, lon=g_lon, zoom=zoom_level)
+                    log_to_job(job_id, f"  Tile complete. Total unique: {len(all_results)}")
                 except Exception as e:
                     log_to_job(job_id, f"  Error: {e}")
         else:
             full_query = f"{search_query} in {location}"
             log_to_job(job_id, f"STANDARD MODE: '{full_query}', Target: {total_target}")
             
-            results = await scraper.run(full_query, total_target)
-            save_job_results(job_id, results)
-            log_to_job(job_id, f"Completed: {len(results)} results")
-            all_results = results
+            await scraper.run(full_query, total_target)
+            log_to_job(job_id, f"Completed: {len(all_results)} results")
         
         update_job_status(job_id, "completed", len(all_results))
         log_to_job(job_id, f"Job completed with {len(all_results)} results")

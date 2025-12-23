@@ -1,5 +1,7 @@
 import asyncio
 import re
+import os
+from datetime import datetime
 from playwright.async_api import async_playwright
 from .extractor import Extractor
 from .storage import Storage
@@ -11,6 +13,46 @@ class ScraperEngine:
         self.storage = Storage()
         self.log_callback = log_callback or print
         self.result_callback = result_callback  # Called after each result with (result, current_count, total)
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    async def _handle_google_consent(self, page):
+        """Detects and clicks 'Accept all' or 'I agree' buttons on Google consent pages."""
+        try:
+            # Common selectors for Google consent buttons
+            consent_selectors = [
+                'button[aria-label="Accept all"]',
+                'button[aria-label="Agree"]',
+                'button:has-text("Accept all")',
+                'button:has-text("I agree")',
+                'button:has-text("Reject all")', # Sometimes better to reject if it clears the screen
+                '#L2AGLb', # Explicit ID often used for 'Accept all'
+            ]
+            
+            for selector in consent_selectors:
+                try:
+                    button = await page.wait_for_selector(selector, timeout=2000)
+                    if button:
+                        print(f"  Bypassing Google consent screen ({selector})...")
+                        await button.click()
+                        await asyncio.sleep(1)
+                        return True
+                except:
+                    continue
+            return False
+        except Exception as e:
+            print(f"  Error handling consent: {e}")
+            return False
+
+    async def _take_screenshot_on_error(self, page, name="timeout_error"):
+        """Captures a screenshot for debugging when an error occurs."""
+        try:
+            os.makedirs("debug", exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"debug/{name}_{timestamp}.png"
+            await page.screenshot(path=filename)
+            print(f"  [DEBUG] Screenshot saved to {filename}")
+        except:
+            pass
 
     async def get_location_coordinates(self, location_name):
         """
@@ -20,11 +62,27 @@ class ScraperEngine:
         async with async_playwright() as p:
             launch_args = ["--disable-gpu", "--disable-dev-shm-usage", "--disable-extensions"]
             browser = await p.chromium.launch(headless=self.headless, args=launch_args)
-            page = await browser.new_page()
+            context = await browser.new_context(user_agent=self.user_agent)
+            page = await context.new_page()
             
             print(f"Calibrating location: {location_name}...")
             await page.goto("https://www.google.com/maps?hl=en")
-            await page.wait_for_selector("input#searchboxinput")
+            
+            # Handle possible consent screen
+            await self._handle_google_consent(page)
+            
+            try:
+                await page.wait_for_selector("input#searchboxinput", timeout=15000)
+            except:
+                print("  Search box not found. Checking for consent again or taking screenshot...")
+                await self._handle_google_consent(page)
+                try:
+                    await page.wait_for_selector("input#searchboxinput", timeout=5000)
+                except:
+                    await self._take_screenshot_on_error(page, "calibration_timeout")
+                    await browser.close()
+                    return None
+
             await page.fill("input#searchboxinput", location_name)
             await page.keyboard.press("Enter")
             
@@ -191,7 +249,7 @@ class ScraperEngine:
         async with async_playwright() as p:
             launch_args = ["--disable-gpu", "--disable-dev-shm-usage", "--disable-extensions"]
             browser = await p.chromium.launch(headless=self.headless, args=launch_args)
-            context = await browser.new_context()
+            context = await browser.new_context(user_agent=self.user_agent)
             page = await context.new_page()
             
             # Construct URL with coordinates if provided
@@ -206,9 +264,23 @@ class ScraperEngine:
             
             await page.goto(url)
             
+            # Handle possible consent screen
+            await self._handle_google_consent(page)
+            
             # If standard search, we need to type and enter
             if not (lat and lon and zoom):
-                await page.wait_for_selector("input#searchboxinput")
+                try:
+                    await page.wait_for_selector("input#searchboxinput", timeout=15000)
+                except:
+                    print("  Search box not found in run mode. Checking consent and retrying...")
+                    await self._handle_google_consent(page)
+                    try:
+                        await page.wait_for_selector("input#searchboxinput", timeout=5000)
+                    except:
+                        await self._take_screenshot_on_error(page, "search_timeout")
+                        await browser.close()
+                        return []
+
                 await page.fill("input#searchboxinput", search_term)
                 await page.keyboard.press("Enter")
                 self.log_callback("Searching...")
