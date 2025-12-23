@@ -1,0 +1,6 @@
+playwright
+pandas
+beautifulsoup4
+flask
+pymongo
+python-dotenv

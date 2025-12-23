@@ -1,0 +1,8 @@
+{
+    "search_query": "fast food",
+    "location": "Pokhara",
+    "total": 30,
+    "headless": true,
+    "grid_size": 1,
+    "zoom_level": 14
+}

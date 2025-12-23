@@ -1,0 +1,10 @@
+{
+    "search_query": "restaurant",
+    "location": "Kathmandu",
+    "total": 10,
+    "headless": true,
+    "sub_locations": [
+        "Thamel",
+        "Patan"
+    ]
+}

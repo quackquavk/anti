@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Maps Scraper</title>
+    <style>
+      :root {
+        --bg-dark: #0f0f1a;
+        --bg-card: #1a1a2e;
+        --bg-input: #252540;
+        --accent: #6366f1;
+        --accent-hover: #818cf8;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --text: #e2e8f0;
+        --text-muted: #94a3b8;
+        --border: #334155;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+        background: var(--bg-dark);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 2rem;
+        background: linear-gradient(135deg, var(--accent), #a855f7);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        margin-bottom: 2rem;
+      }
+
+      .grid-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+
+      @media (max-width: 900px) {
+        .grid-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .card {
+        background: var(--bg-card);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+      }
+
+      .card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .form-group.full-width {
+        grid-column: span 2;
+      }
+
+      label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      input[type="text"],
+      input[type="number"] {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        color: var(--text);
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      }
+
+      .toggle-container {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding-top: 0.5rem;
+      }
+
+      .toggle {
+        position: relative;
+        width: 48px;
+        height: 26px;
+      }
+
+      .toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: var(--bg-input);
+        border-radius: 26px;
+        transition: 0.3s;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 20px;
+        width: 20px;
+        left: 3px;
+        bottom: 3px;
+        background: var(--text);
+        border-radius: 50%;
+        transition: 0.3s;
+      }
+
+      .toggle input:checked + .toggle-slider {
+        background: var(--accent);
+      }
+      .toggle input:checked + .toggle-slider:before {
+        transform: translateX(22px);
+      }
+
+      .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: white;
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+      }
+      .btn-danger {
+        background: var(--danger);
+        color: white;
+      }
+      .btn-success {
+        background: var(--success);
+        color: white;
+      }
+      .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Jobs List */
+      .jobs-list {
+        max-height: 500px;
+        overflow-y: auto;
+      }
+
+      .job-item {
+        background: var(--bg-input);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+      }
+
+      .job-item:hover {
+        border-color: var(--accent);
+      }
+      .job-item.selected {
+        border-color: var(--accent);
+        background: rgba(99, 102, 241, 0.1);
+      }
+
+      .job-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+
+      .job-query {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .job-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .badge {
+        padding: 0.25rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .badge-pending {
+        background: var(--bg-dark);
+        color: var(--text-muted);
+      }
+      .badge-running {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--success);
+      }
+      .badge-completed {
+        background: rgba(34, 197, 94, 0.3);
+        color: var(--success);
+      }
+      .badge-stopped {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+      }
+      .badge-error {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+      }
+      .badge-stopping {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+      }
+
+      /* Job Details Panel */
+      .job-details {
+        display: none;
+      }
+
+      .job-details.active {
+        display: block;
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-label {
+        color: var(--text-muted);
+      }
+      .detail-value {
+        font-weight: 500;
+      }
+
+      .console {
+        background: #0d0d14;
+        border-radius: 8px;
+        padding: 1rem;
+        height: 200px;
+        overflow-y: auto;
+        font-family: "Fira Code", "SF Mono", monospace;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        margin-top: 1rem;
+      }
+
+      .console::-webkit-scrollbar {
+        width: 6px;
+      }
+      .console::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+
+      .log-entry {
+        color: var(--text-muted);
+        margin-bottom: 0.25rem;
+      }
+      .log-entry.error {
+        color: var(--danger);
+      }
+      .log-entry.success {
+        color: var(--success);
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--text-muted);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .pulse {
+        animation: pulse 1.5s infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🗺️ Google Maps Scraper</h1>
+      <p class="subtitle">
+        Start multiple scraping jobs and track their progress
+      </p>
+
+      <div class="grid-layout">
+        <!-- Left Column: New Job Form -->
+        <div>
+          <div class="card">
+            <h2 class="card-title">➕ New Scraping Job</h2>
+            <form id="configForm">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="search_query">Search Query</label>
+                  <input
+                    type="text"
+                    id="search_query"
+                    value="restaurant"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="location">Location</label>
+                  <input type="text" id="location" value="Kathmandu" required />
+                </div>
+                <div class="form-group">
+                  <label for="total">Total Results</label>
+                  <input
+                    type="number"
+                    id="total"
+                    value="100"
+                    min="1"
+                    max="10000"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="grid_size">Grid Size (km)</label>
+                  <input
+                    type="number"
+                    id="grid_size"
+                    value="3"
+                    min="1"
+                    max="50"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="zoom_level">Zoom Level</label>
+                  <input
+                    type="number"
+                    id="zoom_level"
+                    value="15"
+                    min="10"
+                    max="21"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Headless Mode</label>
+                  <div class="toggle-container">
+                    <label class="toggle">
+                      <input type="checkbox" id="headless" checked />
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <span id="headlessLabel">On</span>
+                  </div>
+                </div>
+                <div class="form-group full-width">
+                  <button
+                    type="submit"
+                    class="btn btn-primary"
+                    style="width: 100%"
+                  >
+                    🚀 Start New Job
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Job Details Panel -->
+          <div
+            class="card job-details"
+            id="jobDetails"
+            style="margin-top: 1.5rem"
+          >
+            <h2 class="card-title">📋 Job Details</h2>
+            <div id="detailsContent">
+              <div class="detail-row">
+                <span class="detail-label">Status</span>
+                <span class="detail-value" id="detailStatus">-</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Query</span>
+                <span class="detail-value" id="detailQuery">-</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Location</span>
+                <span class="detail-value" id="detailLocation">-</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Results</span>
+                <span class="detail-value" id="detailResults">-</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Target</span>
+                <span class="detail-value" id="detailTarget">-</span>
+              </div>
+              <div class="action-buttons">
+                <button
+                  class="btn btn-success btn-sm"
+                  id="exportBtn"
+                  onclick="exportJob()"
+                >
+                  ⬇ Export CSV
+                </button>
+                <button
+                  class="btn btn-danger btn-sm"
+                  id="stopBtn"
+                  onclick="stopJob()"
+                >
+                  ⏹ Stop
+                </button>
+                <button
+                  class="btn btn-sm"
+                  style="background: var(--border)"
+                  id="deleteBtn"
+                  onclick="deleteJob()"
+                >
+                  🗑 Delete
+                </button>
+              </div>
+              <div class="console" id="console">
+                <div class="log-entry">Select a job to view logs...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Jobs List -->
+        <div class="card">
+          <h2 class="card-title">
+            📊 Jobs
+            <button
+              class="btn btn-sm"
+              style="margin-left: auto; background: var(--bg-input)"
+              onclick="loadJobs()"
+            >
+              🔄 Refresh
+            </button>
+          </h2>
+          <div class="jobs-list" id="jobsList">
+            <div class="empty-state">
+              <p>No jobs yet. Start a new scraping job!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById("configForm");
+      const jobsList = document.getElementById("jobsList");
+      const jobDetails = document.getElementById("jobDetails");
+      const consoleEl = document.getElementById("console");
+      const headlessCheckbox = document.getElementById("headless");
+      const headlessLabel = document.getElementById("headlessLabel");
+
+      let selectedJobId = null;
+      let refreshInterval = null;
+
+      headlessCheckbox.addEventListener("change", () => {
+        headlessLabel.textContent = headlessCheckbox.checked ? "On" : "Off";
+      });
+
+      function formatDate(dateStr) {
+        if (!dateStr) return "-";
+        const date = new Date(dateStr);
+        return date.toLocaleString();
+      }
+
+      function getBadgeClass(status) {
+        return `badge badge-${status || "pending"}`;
+      }
+
+      async function loadJobs() {
+        try {
+          const res = await fetch("/api/jobs");
+          const jobs = await res.json();
+
+          if (jobs.length === 0) {
+            jobsList.innerHTML =
+              '<div class="empty-state"><p>No jobs yet. Start a new scraping job!</p></div>';
+            return;
+          }
+
+          jobsList.innerHTML = jobs
+            .map(
+              (job) => `
+                    <div class="job-item ${
+                      job._id === selectedJobId ? "selected" : ""
+                    }" 
+                         onclick="selectJob('${job._id}')">
+                        <div class="job-header">
+                            <span class="job-query">${
+                              job.config?.search_query || "Unknown"
+                            } in ${job.config?.location || "Unknown"}</span>
+                            <span class="${getBadgeClass(job.status)} ${
+                job.status === "running" ? "pulse" : ""
+              }">${job.status}</span>
+                        </div>
+                        <div class="job-meta">
+                            <span>📊 ${job.results_count || 0} / ${
+                job.config?.total || 0
+              }</span>
+                            <span>🕐 ${formatDate(job.created_at)}</span>
+                        </div>
+                    </div>
+                `
+            )
+            .join("");
+        } catch (e) {
+          console.error("Failed to load jobs:", e);
+        }
+      }
+
+      async function selectJob(jobId) {
+        selectedJobId = jobId;
+        jobDetails.classList.add("active");
+
+        // Highlight selected
+        document
+          .querySelectorAll(".job-item")
+          .forEach((el) => el.classList.remove("selected"));
+        document
+          .querySelector(`[onclick="selectJob('${jobId}')"]`)
+          ?.classList.add("selected");
+
+        await refreshJobDetails();
+      }
+
+      async function refreshJobDetails() {
+        if (!selectedJobId) return;
+
+        try {
+          const res = await fetch(`/api/jobs/${selectedJobId}`);
+          const job = await res.json();
+
+          if (job.error && !job.config) {
+            jobDetails.classList.remove("active");
+            selectedJobId = null;
+            return;
+          }
+
+          document.getElementById(
+            "detailStatus"
+          ).innerHTML = `<span class="${getBadgeClass(job.status)}">${
+            job.status
+          }</span>`;
+          document.getElementById("detailQuery").textContent =
+            job.config?.search_query || "-";
+          document.getElementById("detailLocation").textContent =
+            job.config?.location || "-";
+          document.getElementById("detailResults").textContent =
+            job.results_count || 0;
+          document.getElementById("detailTarget").textContent =
+            job.config?.total || "-";
+
+          // Enable/disable buttons
+          document.getElementById("stopBtn").disabled =
+            job.status !== "running";
+          document.getElementById("exportBtn").disabled = !job.has_results;
+
+          // Update console
+          if (job.logs && job.logs.length > 0) {
+            consoleEl.innerHTML = job.logs
+              .map((log) => {
+                const type = log.includes("ERROR")
+                  ? "error"
+                  : log.includes("SUCCESS") || log.includes("completed")
+                  ? "success"
+                  : "";
+                return `<div class="log-entry ${type}">${log}</div>`;
+              })
+              .join("");
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+          }
+        } catch (e) {
+          console.error("Failed to load job details:", e);
+        }
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const config = {
+          search_query: document.getElementById("search_query").value,
+          location: document.getElementById("location").value,
+          total: parseInt(document.getElementById("total").value),
+          grid_size: parseInt(document.getElementById("grid_size").value),
+          zoom_level: parseInt(document.getElementById("zoom_level").value),
+          headless: headlessCheckbox.checked,
+        };
+
+        try {
+          const res = await fetch("/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config),
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            await loadJobs();
+            selectJob(data.job_id);
+          } else {
+            alert(data.error || "Failed to create job");
+          }
+        } catch (e) {
+          alert("Connection error: " + e.message);
+        }
+      });
+
+      async function stopJob() {
+        if (!selectedJobId) return;
+        try {
+          await fetch(`/api/jobs/${selectedJobId}/stop`, { method: "POST" });
+          await refreshJobDetails();
+          await loadJobs();
+        } catch (e) {
+          alert("Error stopping job: " + e.message);
+        }
+      }
+
+      async function exportJob() {
+        if (!selectedJobId) return;
+        try {
+          const res = await fetch(`/api/jobs/${selectedJobId}/export`);
+          if (res.ok) {
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `job_${selectedJobId}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          } else {
+            const data = await res.json();
+            alert(data.error || "Export failed");
+          }
+        } catch (e) {
+          alert("Export error: " + e.message);
+        }
+      }
+
+      async function deleteJob() {
+        if (!selectedJobId) return;
+        if (!confirm("Delete this job?")) return;
+
+        try {
+          await fetch(`/api/jobs/${selectedJobId}`, { method: "DELETE" });
+          jobDetails.classList.remove("active");
+          selectedJobId = null;
+          await loadJobs();
+        } catch (e) {
+          alert("Error deleting job: " + e.message);
+        }
+      }
+
+      // Initial load and auto-refresh
+      loadJobs();
+      refreshInterval = setInterval(() => {
+        loadJobs();
+        if (selectedJobId) refreshJobDetails();
+      }, 3000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+{
+    "search_query": "restaurant",
+    "location": "Kathmandu",
+    "total": 100,
+    "grid_size": 3,
+    "zoom_level": 15,
+    "headless": true
+}
