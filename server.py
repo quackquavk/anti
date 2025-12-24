@@ -191,8 +191,13 @@ def index():
 
 @app.route("/api/jobs", methods=["GET"])
 def list_jobs():
-    """List all jobs, newest first."""
-    jobs = list(jobs_collection.find().sort("created_at", -1).limit(50))
+    """List all jobs, newest first. Optionally filter by user_id."""
+    user_id = request.args.get("user_id")
+    query = {}
+    if user_id:
+        query["user_id"] = user_id
+        
+    jobs = list(jobs_collection.find(query).sort("created_at", -1).limit(50))
     for job in jobs:
         job["_id"] = str(job["_id"])
     return jsonify(jobs)
@@ -200,10 +205,17 @@ def list_jobs():
 @app.route("/api/jobs", methods=["POST"])
 def create_job():
     """Create and start a new scraping job."""
-    config = request.json
+    data = request.json
+    config = data.get("config", {})
+    # Support direct config passed as body or wrapped in "config" key
+    if not config and "search_query" in data:
+        config = data
+    
+    user_id = data.get("user_id")
     
     # Create job document
     job = {
+        "user_id": user_id,
         "config": config,
         "status": "pending",
         "results_count": 0,
