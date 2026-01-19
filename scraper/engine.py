@@ -25,6 +25,7 @@ class ScraperEngine:
                 'button:has-text("Accept all")',
                 'button:has-text("I agree")',
                 'button:has-text("Reject all")', # Sometimes better to reject if it clears the screen
+                'button:has-text("Accept")',
                 '#L2AGLb', # Explicit ID often used for 'Accept all'
             ]
             
@@ -42,6 +43,22 @@ class ScraperEngine:
         except Exception as e:
             print(f"  Error handling consent: {e}")
             return False
+
+    async def _find_search_box(self, page, timeout=10000):
+        """Finds the search box using multiple potential selectors."""
+        search_selectors = ["input#searchboxinput", "input.searchboxinput", "[name='q']", "input.gsfi"]
+        for selector in search_selectors:
+            try:
+                element = await page.wait_for_selector(selector, timeout=2000)
+                if element:
+                    return element
+            except:
+                continue
+        # Last ditch effort with a longer timeout on the primary selector
+        try:
+            return await page.wait_for_selector("input#searchboxinput", timeout=timeout)
+        except:
+            return None
 
     async def _take_screenshot_on_error(self, page, name="timeout_error"):
         """Captures a screenshot for debugging when an error occurs."""
@@ -71,19 +88,17 @@ class ScraperEngine:
             # Handle possible consent screen
             await self._handle_google_consent(page)
             
-            try:
-                await page.wait_for_selector("input#searchboxinput", timeout=15000)
-            except:
+            search_box = await self._find_search_box(page)
+            if not search_box:
                 print("  Search box not found. Checking for consent again or taking screenshot...")
                 await self._handle_google_consent(page)
-                try:
-                    await page.wait_for_selector("input#searchboxinput", timeout=5000)
-                except:
+                search_box = await self._find_search_box(page, timeout=5000)
+                if not search_box:
                     await self._take_screenshot_on_error(page, "calibration_timeout")
                     await browser.close()
                     return None
 
-            await page.fill("input#searchboxinput", location_name)
+            await search_box.fill(location_name)
             await page.keyboard.press("Enter")
             
             # Wait for URL to change to contain coordinates '@lat,lon'
@@ -317,19 +332,17 @@ class ScraperEngine:
             
             # If standard search, we need to type and enter
             if not (lat and lon and zoom):
-                try:
-                    await page.wait_for_selector("input#searchboxinput", timeout=15000)
-                except:
+                search_box = await self._find_search_box(page)
+                if not search_box:
                     print("  Search box not found in run mode. Checking consent and retrying...")
                     await self._handle_google_consent(page)
-                    try:
-                        await page.wait_for_selector("input#searchboxinput", timeout=5000)
-                    except:
+                    search_box = await self._find_search_box(page, timeout=5000)
+                    if not search_box:
                         await self._take_screenshot_on_error(page, "search_timeout")
                         await browser.close()
                         return []
 
-                await page.fill("input#searchboxinput", search_term)
+                await search_box.fill(search_term)
                 await page.keyboard.press("Enter")
                 self.log_callback("Searching...")
 
