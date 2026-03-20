@@ -206,7 +206,8 @@
 
       /* Jobs List */
       .jobs-list {
-        max-height: 500px;
+        height: 100%;
+        min-height: 500px;
         overflow-y: auto;
       }
 
@@ -654,8 +655,17 @@
         }
       }
 
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const SUBMIT_COOLDOWN = 10000; // 10 seconds cooldown
+      let isSubmitting = false;
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+
+        if (isSubmitting) return;
+        isSubmitting = true;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "🚀 Starting...";
 
         const config = {
           search_query: document.getElementById("search_query").value,
@@ -683,6 +693,12 @@
           }
         } catch (e) {
           alert("Connection error: " + e.message);
+        } finally {
+          setTimeout(() => {
+            isSubmitting = false;
+            submitBtn.disabled = false;
+            submitBtn.textContent = "🚀 Start New Job";
+          }, SUBMIT_COOLDOWN);
         }
       });
 
