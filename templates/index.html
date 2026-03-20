@@ -71,6 +71,17 @@
         border: 1px solid var(--border);
       }
 
+      .jobs-card {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 180px);
+        min-height: 400px;
+      }
+
+      .jobs-card .card-title {
+        flex-shrink: 0;
+      }
+
       .card-title {
         font-size: 1.1rem;
         font-weight: 600;
@@ -206,9 +217,9 @@
 
       /* Jobs List */
       .jobs-list {
-        height: 100%;
-        min-height: 500px;
+        flex: 1;
         overflow-y: auto;
+        min-height: 0;
       }
 
       .job-item {
@@ -503,7 +514,7 @@
         </div>
 
         <!-- Right Column: Jobs List -->
-        <div class="card">
+        <div class="card jobs-card">
           <h2 class="card-title">
             📊 Jobs
             <button
