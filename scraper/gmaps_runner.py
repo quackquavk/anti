@@ -200,15 +200,64 @@ class GmapsRunner:
         return offset, buffer, False
 
     def _pump_stderr(self, proc):
-        """Forward the scraper's own logs into the job log, lightly filtered."""
+        """Distil the scraper's stderr into a few human-readable lines.
+
+        Upstream emits a JSON event per action: one per place visited carrying a
+        full Google Maps URL, and one per business website that loads slowly
+        carrying a Playwright call log. Forwarded verbatim that buried the job
+        log in noise, so parse it and surface only what tells the user
+        something. Website fetch timeouts are normal when chasing emails, so
+        they're counted and reported once rather than line by line.
+        """
+        site_failures = 0
+        last_stats = None
+
         for raw in iter(proc.stderr.readline, b""):
-            line = raw.decode("utf-8", errors="replace").rstrip()
-            if not line:
+            line = raw.decode("utf-8", errors="replace").strip()
+
+            # Startup banner and sponsor art aren't JSON; skip anything that
+            # isn't a structured event.
+            if not line.startswith("{"):
                 continue
-            # These are per-request noise; the job log is user-facing.
-            if any(s in line for s in ("level=DEBUG", "level=TRACE")):
+
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
                 continue
-            self.log(f"  [scraper] {line[:300]}")
+
+            message = event.get("message", "")
+
+            if "places found" in message:
+                self.log(f"  {message}")
+
+            elif message == "scrapemate stats":
+                done = event.get("numOfJobsCompleted", 0)
+                failed = event.get("numOfJobsFailed", 0)
+                speed = event.get("speed", "")
+                stats = (done, failed, speed)
+                # Emitted on a timer, so skip it when nothing has moved.
+                if stats != last_stats:
+                    last_stats = stats
+                    note = f"  {done} pages processed"
+                    if failed:
+                        note += f", {failed} failed"
+                    if speed:
+                        note += f" ({speed})"
+                    self.log(note)
+
+            elif event.get("level") == "error":
+                error = event.get("error", "")
+                if "Frame.Goto" in error or "timeout" in error.lower():
+                    site_failures += 1
+                elif "context canceled" not in error:
+                    # Genuinely unexpected; worth one short line.
+                    self.log(f"  scraper error: {error.splitlines()[0][:160]}")
+
+        if site_failures:
+            self.log(
+                f"  {site_failures} business website(s) were too slow to read "
+                f"for an email; their other fields are unaffected."
+            )
 
     # ------------------------------------------------------------------- main
 
@@ -337,9 +386,12 @@ class GmapsRunner:
                     offset, buffer, _ = self._drain(out_path, offset, buffer, target)
                     break
 
-                if len(self._results) and len(self._results) != last_report:
-                    last_report = len(self._results)
-                    self.log(f"  {last_report} unique places so far...")
+                # The UI streams each place into its results table, so log
+                # milestones only rather than one line per place.
+                found = len(self._results)
+                if found and found != last_report and found % 10 == 0:
+                    last_report = found
+                    self.log(f"  {found} places found so far...")
 
                 time.sleep(1.0)
         finally:

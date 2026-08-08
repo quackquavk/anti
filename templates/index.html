@@ -315,16 +315,116 @@
         font-weight: 500;
       }
 
+      /* ---- progress ---- */
+      .progress-track {
+        height: 6px;
+        background: var(--bg-input);
+        border-radius: 3px;
+        overflow: hidden;
+        margin: 1rem 0 0.35rem;
+      }
+      .progress-fill {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 3px;
+        transition: width 0.4s ease;
+      }
+      .progress-fill.done {
+        background: var(--success);
+      }
+      .progress-caption {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        display: flex;
+        justify-content: space-between;
+      }
+
+      /* ---- live results table ---- */
+      .results-wrap {
+        margin-top: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: auto;
+        max-height: 420px;
+      }
+      .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      .results-table thead th {
+        position: sticky;
+        top: 0;
+        background: var(--bg-input);
+        color: var(--text-muted);
+        text-align: left;
+        font-weight: 500;
+        padding: 0.5rem 0.65rem;
+        white-space: nowrap;
+        z-index: 1;
+      }
+      .results-table td {
+        padding: 0.5rem 0.65rem;
+        border-top: 1px solid var(--border);
+        vertical-align: top;
+      }
+      .results-table tbody tr:hover {
+        background: rgba(99, 102, 241, 0.07);
+      }
+      .cell-name {
+        font-weight: 500;
+        min-width: 170px;
+      }
+      .cell-sub {
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        margin-top: 0.15rem;
+      }
+      .cell-mono {
+        font-family: "Fira Code", "SF Mono", monospace;
+        white-space: nowrap;
+      }
+      .cell-empty {
+        color: var(--border);
+      }
+      .cell-rating {
+        white-space: nowrap;
+      }
+      .results-empty {
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+
+      /* ---- collapsible activity log ---- */
+      .log-toggle {
+        margin-top: 0.85rem;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        cursor: pointer;
+        padding: 0.25rem 0;
+        font-family: inherit;
+      }
+      .log-toggle:hover {
+        color: var(--text);
+      }
+
       .console {
         background: #0d0d14;
         border-radius: 8px;
         padding: 1rem;
-        height: 200px;
+        height: 160px;
         overflow-y: auto;
         font-family: "Fira Code", "SF Mono", monospace;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         line-height: 1.5;
-        margin-top: 1rem;
+        margin-top: 0.5rem;
+      }
+      .console.hidden {
+        display: none;
       }
 
       .console::-webkit-scrollbar {
@@ -507,8 +607,36 @@
                   🗑 Delete
                 </button>
               </div>
-              <div class="console" id="console">
-                <div class="log-entry">Select a job to view logs...</div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+              </div>
+              <div class="progress-caption">
+                <span id="progressText">No job selected</span>
+                <span id="progressPct"></span>
+              </div>
+
+              <div class="results-wrap" id="resultsWrap">
+                <div class="results-empty" id="resultsEmpty">
+                  Select a job to see its results.
+                </div>
+                <table class="results-table" id="resultsTable" style="display: none">
+                  <thead>
+                    <tr>
+                      <th>Business</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultsBody"></tbody>
+                </table>
+              </div>
+
+              <button class="log-toggle" id="logToggle" onclick="toggleLog()">
+                ▸ Show activity log
+              </button>
+              <div class="console hidden" id="console">
+                <div class="log-entry">Select a job to view its log...</div>
               </div>
             </div>
           </div>
@@ -560,6 +688,99 @@
         return `badge badge-${status || "pending"}`;
       }
 
+      // Business names and addresses come from scraped pages, so they are
+      // untrusted input -- never interpolate them into innerHTML raw.
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return "";
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderProgress(job) {
+        const found = job.results_count || 0;
+        const target = job.config?.total || 0;
+        const pct = target ? Math.min(100, Math.round((found / target) * 100)) : 0;
+        const done = ["completed", "stopped", "error"].includes(job.status);
+
+        const fill = document.getElementById("progressFill");
+        fill.style.width = `${done ? 100 : pct}%`;
+        fill.classList.toggle("done", done);
+
+        let text;
+        if (job.status === "running") {
+          text = `Scraping... ${found} of ${target} found`;
+        } else if (job.status === "error") {
+          text = job.error ? `Failed: ${job.error}` : "Failed";
+        } else {
+          text = `${found} place${found === 1 ? "" : "s"} found`;
+        }
+        document.getElementById("progressText").textContent = text;
+        document.getElementById("progressPct").textContent =
+          job.status === "running" && target ? `${pct}%` : "";
+      }
+
+      function renderResults(results) {
+        const table = document.getElementById("resultsTable");
+        const empty = document.getElementById("resultsEmpty");
+        const body = document.getElementById("resultsBody");
+
+        if (!results.length) {
+          table.style.display = "none";
+          empty.style.display = "block";
+          empty.textContent = "No results yet.";
+          return;
+        }
+
+        empty.style.display = "none";
+        table.style.display = "table";
+
+        const dash = '<span class="cell-empty">—</span>';
+
+        body.innerHTML = results
+          .map((r) => {
+            const sub = [r.category, r.city].filter(Boolean).join(" · ");
+            const name = r.location_link
+              ? `<a href="${escapeHtml(r.location_link)}" target="_blank"
+                    rel="noopener noreferrer">${escapeHtml(r.name)}</a>`
+              : escapeHtml(r.name);
+
+            const phone = r.phone
+              ? `<span class="cell-mono">${escapeHtml(r.phone)}</span>`
+              : dash;
+
+            const email = r.email
+              ? `<a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>`
+              : dash;
+
+            const rating = r.rating
+              ? `${r.rating} <span class="cell-sub" style="display:inline">
+                   (${r.review_count || 0})</span>`
+              : dash;
+
+            return `<tr>
+              <td class="cell-name">${name}${
+              sub ? `<div class="cell-sub">${escapeHtml(sub)}</div>` : ""
+            }</td>
+              <td>${phone}</td>
+              <td>${email}</td>
+              <td class="cell-rating">${rating}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      function toggleLog() {
+        const el = document.getElementById("console");
+        const btn = document.getElementById("logToggle");
+        const hidden = el.classList.toggle("hidden");
+        btn.textContent = hidden ? "▸ Show activity log" : "▾ Hide activity log";
+        if (!hidden) el.scrollTop = el.scrollHeight;
+      }
+
       async function loadJobs() {
         try {
           const res = await fetch("/api/jobs");
@@ -602,8 +823,20 @@
       }
 
       async function selectJob(jobId) {
+        const switching = selectedJobId !== jobId;
         selectedJobId = jobId;
         jobDetails.classList.add("active");
+
+        // Clear the previous job's rows so they can't be mistaken for this
+        // job's while the fetch is in flight.
+        if (switching) {
+          document.getElementById("resultsBody").innerHTML = "";
+          document.getElementById("resultsTable").style.display = "none";
+          const empty = document.getElementById("resultsEmpty");
+          empty.style.display = "block";
+          empty.textContent = "Loading...";
+          consoleEl.innerHTML = "";
+        }
 
         // Highlight selected
         document
@@ -620,7 +853,7 @@
         if (!selectedJobId) return;
 
         try {
-          const res = await fetch(`/api/jobs/${selectedJobId}`);
+          const res = await fetch(`/api/jobs/${selectedJobId}?slim=1`);
           const job = await res.json();
 
           if (job.error && !job.config) {
@@ -648,6 +881,9 @@
             job.status !== "running";
           document.getElementById("exportBtn").disabled = !job.has_results;
 
+          renderProgress(job);
+          renderResults(job.results || []);
+
           // Update console
           if (job.logs && job.logs.length > 0) {
             consoleEl.innerHTML = job.logs
@@ -657,7 +893,7 @@
                   : log.includes("SUCCESS") || log.includes("completed")
                   ? "success"
                   : "";
-                return `<div class="log-entry ${type}">${log}</div>`;
+                return `<div class="log-entry ${type}">${escapeHtml(log)}</div>`;
               })
               .join("");
             consoleEl.scrollTop = consoleEl.scrollHeight;

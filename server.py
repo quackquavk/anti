@@ -175,16 +175,35 @@ def create_job():
     
     return jsonify({"job_id": job_id, "message": "Job started"})
 
+# Fields the UI's results table actually renders. The full record carries
+# thumbnails, open_hours and review breakdowns, which are wasteful to ship on a
+# 3-second poll but still available from the unslimmed endpoint and the CSV.
+SLIM_RESULT_FIELDS = (
+    "name", "phone", "email", "category", "city", "rating",
+    "review_count", "location_link",
+)
+
+
 @app.route("/api/jobs/<job_id>", methods=["GET"])
 def get_job(job_id):
-    """Get single job details."""
+    """Get single job details.
+
+    Pass ?slim=1 to trim each result to the fields the UI displays.
+    """
     try:
         job = jobs_collection.find_one({"_id": ObjectId(job_id)})
         if not job:
             return jsonify({"error": "Job not found"}), 404
         job["_id"] = str(job["_id"])
-        # Don't return full results in list view (too large)
-        job["has_results"] = len(job.get("results", [])) > 0
+
+        results = job.get("results", [])
+        job["has_results"] = len(results) > 0
+
+        if request.args.get("slim") and results:
+            job["results"] = [
+                {k: r.get(k) for k in SLIM_RESULT_FIELDS} for r in results
+            ]
+
         return jsonify(job)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
