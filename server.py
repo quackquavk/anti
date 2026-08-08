@@ -2,7 +2,7 @@ from flask import Flask, render_template, jsonify, request, Response
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 import json
 import os
@@ -31,7 +31,7 @@ def log_to_job(job_id, message):
         {"_id": ObjectId(job_id)},
         {
             "$push": {"logs": {"$each": [message], "$slice": -100}},
-            "$set": {"updated_at": datetime.utcnow()}
+            "$set": {"updated_at": datetime.now(timezone.utc)}
         }
     )
     print(f"[{job_id}] {message}")
@@ -40,7 +40,7 @@ def update_job_status(job_id, status, results_count=None, error=None):
     """Update job status in MongoDB."""
     update = {
         "status": status,
-        "updated_at": datetime.utcnow()
+        "updated_at": datetime.now(timezone.utc)
     }
     if results_count is not None:
         update["results_count"] = results_count
@@ -60,7 +60,7 @@ def save_job_results(job_id, results):
             "$set": {
                 "results": results,
                 "results_count": len(results),
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
         }
     )
@@ -158,8 +158,8 @@ def create_job():
         "results": [],
         "logs": [],
         "error": None,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
     }
     
     result = jobs_collection.insert_one(job)
@@ -249,6 +249,14 @@ def delete_job(job_id):
         return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
-    print("Starting server at http://localhost:5050")
+    # Local development only. Production runs under gunicorn via systemd:
+    #   gunicorn -w 1 --threads 4 --bind 127.0.0.1:5050 server:app
+    # One worker is required: job threads and active_jobs are in-process state,
+    # so a second worker would only see half the jobs.
+    debug = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "5050"))
+
+    print(f"Starting dev server at http://{host}:{port} (debug={debug})")
     print(f"MongoDB: {'Connected' if client else 'Not connected'}")
-    app.run(debug=True, host='0.0.0.0', port=5050, threaded=True)
+    app.run(debug=debug, host=host, port=port, threaded=True)
