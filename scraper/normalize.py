@@ -7,6 +7,75 @@ that we get structured data instead of regex guesses.
 """
 
 
+# Domains that show up in scraped emails but never belong to the business:
+# website-template placeholders and error-reporting/analytics addresses. The
+# upstream scraper doesn't filter these, so a template's "user@domain.com" would
+# otherwise land in a lead list looking like a real contact.
+PLACEHOLDER_EMAIL_DOMAINS = frozenset({
+    "domain.com",
+    "example.com",
+    "example.org",
+    "example.net",
+    "yourdomain.com",
+    "yourcompany.com",
+    "mydomain.com",
+    "email.com",
+    "yoursite.com",
+    "sitename.com",
+    "sentry.io",
+    "sentry.wixpress.com",
+    "sentry-next.wixpress.com",
+    "wixpress.com",
+})
+
+# Local parts that are obviously boilerplate regardless of domain.
+PLACEHOLDER_LOCAL_PARTS = frozenset({
+    "user", "username", "youremail", "email", "your-email",
+    "someone", "test", "example", "name", "firstname",
+})
+
+# A generic role address is usually the best one to actually contact.
+PREFERRED_PREFIXES = ("info", "contact", "hello", "office", "support", "mail", "admin")
+
+
+def _is_placeholder(email):
+    local, _, domain = email.rpartition("@")
+    if not local or not domain:
+        return True
+    if domain in PLACEHOLDER_EMAIL_DOMAINS:
+        return True
+    if local in PLACEHOLDER_LOCAL_PARTS:
+        return True
+    # Image filenames sometimes survive as "logo@2x.png"-style matches.
+    return email.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"))
+
+
+def clean_emails(emails):
+    """Drop placeholders, dedupe, and order so the best contact comes first."""
+    if not isinstance(emails, list):
+        return []
+
+    seen, cleaned = set(), []
+    for raw in emails:
+        if not isinstance(raw, str):
+            continue
+        email = raw.strip().lower().strip(".,;:")
+        if not email or "@" not in email or email in seen:
+            continue
+        if _is_placeholder(email):
+            continue
+        seen.add(email)
+        cleaned.append(email)
+
+    # Role addresses first, then shortest -- a long address is more often a
+    # concatenation artifact than a real mailbox.
+    cleaned.sort(key=lambda e: (
+        not e.startswith(PREFERRED_PREFIXES),
+        len(e),
+    ))
+    return cleaned
+
+
 def _first(seq):
     if isinstance(seq, list) and seq:
         return seq[0]
@@ -33,7 +102,7 @@ def dedup_key(entry):
 
 def normalize(entry):
     """gosom JSON entry -> our result dict."""
-    emails = entry.get("emails") or []
+    emails = clean_emails(entry.get("emails") or [])
 
     # The upstream struct misspells this as 'longtitude'; newer builds emit both.
     longitude = entry.get("longitude")
