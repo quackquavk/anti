@@ -29,6 +29,32 @@ from .normalize import dedup_key, normalize
 DEFAULT_IMAGE = "gosom/google-maps-scraper"
 PLAYWRIGHT_CACHE_VOLUME = "gmaps-playwright-cache"
 
+# Where docker usually lives. systemd units frequently pin a minimal PATH (ours
+# is just the venv's bin), so relying on PATH alone fails under the service even
+# though it works fine in a login shell.
+DOCKER_FALLBACK_PATHS = (
+    "/usr/bin/docker",
+    "/usr/local/bin/docker",
+    "/snap/bin/docker",
+)
+
+
+def _resolve_executable(cmd, fallbacks):
+    """Find an executable that may not be on a stripped-down PATH."""
+    if os.path.isabs(cmd):
+        return cmd
+
+    found = shutil.which(cmd)
+    if found:
+        return found
+
+    for candidate in fallbacks:
+        if os.access(candidate, os.X_OK):
+            return candidate
+
+    # Let the caller fail with a useful message rather than guessing further.
+    return cmd
+
 # Upstream caps a single non-grid search at roughly this many places, which is
 # also where the old engine's scroll loop gave up. Above it we switch to grid.
 SINGLE_SEARCH_CEILING = 120
@@ -44,7 +70,9 @@ class GmapsRunner:
         self.is_active = is_active or (lambda: True)
 
         self.mode = os.getenv("GMAPS_MODE", "docker")
-        self.docker_cmd = os.getenv("GMAPS_DOCKER_CMD", "docker")
+        self.docker_cmd = _resolve_executable(
+            os.getenv("GMAPS_DOCKER_CMD", "docker"), DOCKER_FALLBACK_PATHS
+        )
         self.image = os.getenv("GMAPS_IMAGE", DEFAULT_IMAGE)
         self.binary = os.getenv("GMAPS_BINARY", "./google-maps-scraper")
         self.data_dir = os.path.abspath(os.getenv("GMAPS_DATA_DIR", "gmapsdata"))
@@ -266,9 +294,9 @@ class GmapsRunner:
             )
         except FileNotFoundError as e:
             raise RuntimeError(
-                f"Could not launch scraper ({e}). "
-                f"In docker mode make sure '{self.docker_cmd}' is on PATH and this "
-                f"user can run it without sudo."
+                f"Could not launch scraper ({e}). Tried '{self.docker_cmd}'. "
+                f"Check the user can run docker without sudo; if it lives somewhere "
+                f"unusual, set GMAPS_DOCKER_CMD to its absolute path."
             ) from e
 
         stderr_thread = threading.Thread(
