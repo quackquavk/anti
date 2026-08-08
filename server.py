@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime, timezone
 import threading
+import shutil
 import json
 import os
 import io
@@ -24,6 +25,47 @@ jobs_collection = db["jobs"]
 
 # Track active job threads
 active_jobs = {}
+
+# Statuses that only a live worker thread can move forward. If the process dies
+# -- restart, deploy, crash, OOM -- jobs sat in these forever and the UI showed
+# them as running indefinitely.
+NON_TERMINAL_STATUSES = ("pending", "running", "stopping")
+
+
+def reconcile_interrupted_jobs():
+    """Close out jobs whose worker died, and bin their leftover work dirs.
+
+    Safe because the service runs a single gunicorn worker, so nothing else can
+    own a job at the moment this runs. Partial results are kept -- a scrape that
+    got 60 places before a restart is still worth something.
+    """
+    result = jobs_collection.update_many(
+        {"status": {"$in": list(NON_TERMINAL_STATUSES)}},
+        {
+            "$set": {"status": "interrupted", "updated_at": datetime.now(timezone.utc)},
+            "$push": {
+                "logs": {
+                    "$each": [
+                        "Server restarted while this job was active, so it was "
+                        "interrupted. Any results collected so far are kept; "
+                        "re-run the job to continue."
+                    ],
+                    "$slice": -100,
+                }
+            },
+        },
+    )
+    if result.modified_count:
+        print(f"[startup] marked {result.modified_count} interrupted job(s)")
+
+    # Work dirs belong to a live scrape; at startup none can be.
+    data_dir = os.path.abspath(os.getenv("GMAPS_DATA_DIR", "gmapsdata"))
+    if os.path.isdir(data_dir):
+        for name in os.listdir(data_dir):
+            shutil.rmtree(os.path.join(data_dir, name), ignore_errors=True)
+
+
+reconcile_interrupted_jobs()
 
 def log_to_job(job_id, message):
     """Append log message to job in MongoDB."""
