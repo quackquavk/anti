@@ -412,13 +412,14 @@
                   />
                 </div>
                 <div class="form-group">
-                  <label for="grid_size">Grid Size (km)</label>
+                  <label for="grid_cell_km">Grid Cell (km)</label>
                   <input
                     type="number"
-                    id="grid_size"
-                    value="3"
-                    min="1"
-                    max="50"
+                    id="grid_cell_km"
+                    value="1"
+                    min="0.2"
+                    max="20"
+                    step="0.1"
                   />
                 </div>
                 <div class="form-group">
@@ -432,13 +433,13 @@
                   />
                 </div>
                 <div class="form-group">
-                  <label>Headless Mode</label>
+                  <label>Extract Emails</label>
                   <div class="toggle-container">
                     <label class="toggle">
-                      <input type="checkbox" id="headless" checked />
+                      <input type="checkbox" id="extractEmail" checked />
                       <span class="toggle-slider"></span>
                     </label>
-                    <span id="headlessLabel">On</span>
+                    <span id="extractEmailLabel">On</span>
                   </div>
                 </div>
                 <div class="form-group full-width">
@@ -539,14 +540,14 @@
       const jobsList = document.getElementById("jobsList");
       const jobDetails = document.getElementById("jobDetails");
       const consoleEl = document.getElementById("console");
-      const headlessCheckbox = document.getElementById("headless");
-      const headlessLabel = document.getElementById("headlessLabel");
+      const emailCheckbox = document.getElementById("extractEmail");
+      const emailLabel = document.getElementById("extractEmailLabel");
 
       let selectedJobId = null;
       let refreshInterval = null;
 
-      headlessCheckbox.addEventListener("change", () => {
-        headlessLabel.textContent = headlessCheckbox.checked ? "On" : "Off";
+      emailCheckbox.addEventListener("change", () => {
+        emailLabel.textContent = emailCheckbox.checked ? "On" : "Off";
       });
 
       function formatDate(dateStr) {
@@ -682,9 +683,9 @@
           search_query: document.getElementById("search_query").value,
           location: document.getElementById("location").value,
           total: parseInt(document.getElementById("total").value),
-          grid_size: parseInt(document.getElementById("grid_size").value),
+          grid_cell_km: parseFloat(document.getElementById("grid_cell_km").value),
           zoom_level: parseInt(document.getElementById("zoom_level").value),
-          headless: headlessCheckbox.checked,
+          email: emailCheckbox.checked,
         };
 
         try {

@@ -4,15 +4,13 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime
 import threading
-import asyncio
 import json
 import os
 import io
 import pandas as pd
 
-from scraper.engine import ScraperEngine
-from scraper.storage import Storage
-from scraper.grid import GridGenerator
+from scraper.gmaps_runner import GmapsRunner
+from scraper.normalize import CSV_COLUMNS
 
 load_dotenv()
 
@@ -67,121 +65,59 @@ def save_job_results(job_id, results):
         }
     )
 
-async def run_scraper_async(job_id, config):
-    """Async scraping logic for a specific job."""
-    
+def run_scraper(job_id, config):
+    """Run one scrape job via the gosom scraper and stream results into Mongo."""
+
     all_results = []
-    unique_ids = set()
-    
-    search_query = config.get("search_query", "restaurant")
-    location = config.get("location", "Kathmandu")
-    total_target = config.get("total", 10)
-    grid_size = config.get("grid_size", 3)
-    zoom_level = min(config.get("zoom_level", 15), 21)
-    
-    # Callbacks for real-time updates
+
     def log_cb(message):
         log_to_job(job_id, message)
-    
+
     def result_cb(result, current_count, total):
-        # Add to our local tracking with deduplication
-        name_clean = (result['name'] or "").lower().strip()
-        phone_clean = (result['phone'] or "").strip()
-        website_clean = (result['website'] or "").strip()
-        
-        if phone_clean:
-            key = f"{name_clean}|{phone_clean}"
-        elif website_clean:
-            key = f"{name_clean}|{website_clean}"
-        else:
-            raw_snippet = (result.get('raw_text') or "")[:20].lower().strip()
-            key = f"{name_clean}|{raw_snippet}"
-        
-        if key not in unique_ids:
-            unique_ids.add(key)
-            all_results.append(result)
-            # Save to MongoDB immediately
-            save_job_results(job_id, all_results)
-    
-    scraper = ScraperEngine(
-        headless=config.get("headless", True),
-        log_callback=log_cb,
-        result_callback=result_cb
-    )
-    grid_gen = GridGenerator()
-    
-    # Check if job is still active (not stopped)
+        # The runner already deduped on place_id, so every result here is new.
+        all_results.append(result)
+        save_job_results(job_id, all_results)
+
     def is_job_active():
-        job = jobs_collection.find_one({"_id": ObjectId(job_id)})
-        return job and job.get("status") == "running"
-    
+        job = jobs_collection.find_one(
+            {"_id": ObjectId(job_id)}, {"status": 1}
+        )
+        return bool(job) and job.get("status") == "running"
+
+    runner = GmapsRunner(
+        log_callback=log_cb,
+        result_callback=result_cb,
+        is_active=is_job_active,
+    )
+
     try:
         update_job_status(job_id, "running")
-        
-        if total_target > 120:
-            log_to_job(job_id, f"AUTO-GRID MODE: Target {total_target} for '{search_query}' in '{location}'")
-            
-            coords = await scraper.get_location_coordinates(location)
-            if not coords:
-                log_to_job(job_id, "Failed to find coordinates. Using simple query.")
-                full_query = f"{search_query} in {location}"
-                await scraper.run(full_query, total_target)
-                update_job_status(job_id, "completed", len(all_results))
-                return
-            
-            lat, lon = coords
-            log_to_job(job_id, f"Found coordinates: {lat}, {lon}")
-            
-            step_km = 2.0
-            grid_points = grid_gen.generate_grid(lat, lon, grid_size, step_km)
-            log_to_job(job_id, f"Grid generated: {len(grid_points)} tiles")
-            
-            for i, (g_lat, g_lon) in enumerate(grid_points):
-                if not is_job_active():
-                    log_to_job(job_id, "Job stopped by user.")
-                    update_job_status(job_id, "stopped", len(all_results))
-                    return
-                    
-                remaining = total_target - len(all_results)
-                if remaining <= 0:
-                    log_to_job(job_id, "Target reached!")
-                    break
-                
-                log_to_job(job_id, f"[{i+1}/{len(grid_points)}] Mining: {g_lat:.4f}, {g_lon:.4f}")
-                batch_target = min(remaining, 500)
-                
-                try:
-                    await scraper.run(search_query, batch_target, lat=g_lat, lon=g_lon, zoom=zoom_level)
-                    log_to_job(job_id, f"  Tile complete. Total unique: {len(all_results)}")
-                except Exception as e:
-                    log_to_job(job_id, f"  Error: {e}")
-        else:
-            full_query = f"{search_query} in {location}"
-            log_to_job(job_id, f"STANDARD MODE: '{full_query}', Target: {total_target}")
-            
-            await scraper.run(full_query, total_target)
-            log_to_job(job_id, f"Completed: {len(all_results)} results")
-        
-        update_job_status(job_id, "completed", len(all_results))
-        log_to_job(job_id, f"Job completed with {len(all_results)} results")
-        
+
+        results = runner.run(job_id, config)
+
+        # Final reconcile in case the last batch landed after the target check.
+        if len(results) != len(all_results):
+            all_results = results
+            save_job_results(job_id, all_results)
+
+        job = jobs_collection.find_one({"_id": ObjectId(job_id)}, {"status": 1})
+        final_status = "stopped" if job and job.get("status") == "stopping" else "completed"
+
+        update_job_status(job_id, final_status, len(all_results))
+        log_to_job(job_id, f"Job {final_status} with {len(all_results)} results")
+
     except Exception as e:
         log_to_job(job_id, f"ERROR: {e}")
-        update_job_status(job_id, "error", error=str(e))
-    
+        update_job_status(job_id, "error", len(all_results), error=str(e))
+
     finally:
-        # Clean up from active jobs
         if job_id in active_jobs:
             del active_jobs[job_id]
 
+
 def run_job_thread(job_id, config):
-    """Run async scraper in a new event loop thread."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_scraper_async(job_id, config))
-    finally:
-        loop.close()
+    """Thread entrypoint. The scraper is a subprocess now, so no event loop."""
+    run_scraper(job_id, config)
 
 # Routes
 
@@ -283,6 +219,13 @@ def export_job_csv(job_id):
             return jsonify({"error": "No results to export"}), 404
         
         df = pd.DataFrame(results)
+
+        # Lead the export with the columns people actually act on, then append
+        # anything else the scraper returned.
+        ordered = [c for c in CSV_COLUMNS if c in df.columns]
+        ordered += [c for c in df.columns if c not in ordered]
+        df = df[ordered]
+
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False)
         

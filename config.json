@@ -2,7 +2,14 @@
     "search_query": "restaurant",
     "location": "Kathmandu",
     "total": 100,
-    "grid_size": 3,
+    "email": true,
     "zoom_level": 15,
-    "headless": true
+    "grid_cell_km": 1.0,
+    "max_grid_cells": 400,
+    "concurrency": 1,
+    "pages_per_browser": 1,
+    "browser_pool_size": 1,
+    "depth": 10,
+    "lang": "en",
+    "exit_on_inactivity": "3m"
 }

@@ -1,4 +1,6 @@
-.venv
 .env
-.DS_Store
-__pycache__
+__pycache__/
+.venv/
+gmapsdata/
+debug/
+results.csv
