@@ -283,6 +283,17 @@ class GmapsRunner:
         if os.path.exists(out_path):
             os.remove(out_path)
 
+        cleanup = config.get("cleanup", True)
+        try:
+            return self._execute(work_dir, out_path, opts, target)
+        finally:
+            # Must be in a finally: a launch failure or a stop mid-run would
+            # otherwise leave the job's work dir behind forever.
+            if cleanup:
+                shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _execute(self, work_dir, out_path, opts, target):
+        """Launch the scraper and collect results until it stops or hits target."""
         argv = self._build_command(work_dir, opts)
         self.log(f"Launching scraper: {' '.join(argv[:6])} ...")
         if opts["email"]:
@@ -341,9 +352,6 @@ class GmapsRunner:
             if code not in (0, None) and not self._results:
                 raise RuntimeError(f"Scraper exited with code {code} and produced no results.")
             self.log(f"Scraper finished with {len(self._results)} unique places.")
-
-        if config.get("cleanup", True):
-            shutil.rmtree(work_dir, ignore_errors=True)
 
         return self._results
 
