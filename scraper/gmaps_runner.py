@@ -17,6 +17,7 @@ Environment:
 """
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -58,6 +59,11 @@ def _resolve_executable(cmd, fallbacks):
 # Upstream caps a single non-grid search at roughly this many places, which is
 # also where the old engine's scroll loop gave up. Above it we switch to grid.
 SINGLE_SEARCH_CEILING = 120
+
+# A grid cell wider than this is far bigger than one search covers at the
+# zoom levels we use, so most of the cell never gets looked at. Areas that
+# would need cells this large aren't grid-scrapable and fall back to search.
+MAX_GRID_CELL_KM = 5.0
 
 
 class GmapsRunner:
@@ -261,6 +267,67 @@ class GmapsRunner:
 
     # ------------------------------------------------------------------- main
 
+    def _plan_grid(self, location, config):
+        """Decide whether this location can sensibly be grid-scraped.
+
+        Returns a plan dict, or None to fall back to a plain search. Grid mode
+        suits a neighbourhood or city; a country cannot be covered this way, and
+        pretending otherwise produces results from the wrong continent.
+        """
+        try:
+            self.log(f"Resolving bounding box for '{location}'...")
+            place = geocode.lookup(location)
+        except geocode.GeocodeError as e:
+            self.log(f"  Geocoding failed ({e}); using a plain search instead.")
+            return None
+
+        bbox = place["bbox"]
+        self.log(f"  Matched: {place['display_name']}")
+
+        # Countries with overseas territories report a box wrapping the globe.
+        # Gridding it scatters searches across the planet, and the bbox is so
+        # wide that clipping cannot reject the strays either.
+        if geocode.spans_antimeridian(bbox):
+            self.log(
+                f"  '{location}' spans the antimeridian, so its bounding box "
+                f"covers most of the globe and cannot be gridded. "
+                f"Using a plain search instead - narrow to a city or region "
+                f"for grid coverage."
+            )
+            return None
+
+        width, height = geocode.bbox_dimensions_km(bbox)
+        self.log(f"  Area: {width:,.1f} x {height:,.1f} km")
+
+        cell = float(config.get("grid_cell_km", 1.0))
+        max_cells = int(config.get("max_grid_cells", 400))
+
+        cells = max(1, int((width / cell) * (height / cell)))
+        if cells > max_cells:
+            # Widen cells to fit the budget, but only so far: past
+            # MAX_GRID_CELL_KM a cell is far bigger than one search covers at
+            # this zoom, so most of its area is never actually looked at.
+            cell = math.sqrt((width * height) / max_cells)
+            cells = max_cells
+            if cell <= MAX_GRID_CELL_KM:
+                self.log(
+                    f"  Widening cell to {cell:.2f} km to stay under "
+                    f"max_grid_cells={max_cells}"
+                )
+
+        if cell > MAX_GRID_CELL_KM:
+            self.log(
+                f"  '{location}' is too large to grid: covering it within "
+                f"max_grid_cells={max_cells} needs {cell:,.0f} km cells, well "
+                f"past the {MAX_GRID_CELL_KM} km a single search covers at this "
+                f"zoom, so most of the area would never be visited. "
+                f"Using a plain search instead - scrape city by city for "
+                f"full coverage."
+            )
+            return None
+
+        return {"bbox": bbox, "cell": cell, "cells": cells}
+
     def run(self, job_id, config):
         """Execute a scrape. Returns the list of unique normalized results."""
         self._seen.clear()
@@ -290,40 +357,28 @@ class GmapsRunner:
         out_path = os.path.join(work_dir, "results.json")
 
         # Grid mode only pays for itself past the single-search ceiling.
+        plan = None
         if target > SINGLE_SEARCH_CEILING and location:
+            plan = self._plan_grid(location, config)
+
+        if plan:
             search_line = query
-            try:
-                self.log(f"Resolving bounding box for '{location}'...")
-                place = geocode.lookup(location)
-                bbox = place["bbox"]
-                width, height = geocode.bbox_dimensions_km(bbox)
-                self.log(f"  Matched: {place['display_name']}")
-                self.log(f"  Area: {width:.1f} x {height:.1f} km")
-
-                cell = float(config.get("grid_cell_km", 1.0))
-                max_cells = int(config.get("max_grid_cells", 400))
-
-                # Guard against a huge bbox turning into thousands of searches.
-                estimated = max(1, int((width / cell) * (height / cell)))
-                if estimated > max_cells:
-                    import math
-                    cell = math.sqrt((width * height) / max_cells)
-                    estimated = max_cells
-                    self.log(
-                        f"  Grid would be {estimated}+ cells; widening cell to "
-                        f"{cell:.2f} km to stay under max_grid_cells={max_cells}"
-                    )
-
-                self.log(f"GRID MODE: ~{estimated} cells of {cell:.2f} km at zoom {opts['zoom']}")
-                opts["grid_bbox"] = geocode.format_bbox(bbox)
-                opts["grid_cell"] = round(cell, 3)
-                self._clip_bbox = bbox
-            except geocode.GeocodeError as e:
-                self.log(f"  Geocoding failed ({e}); falling back to plain search.")
-                search_line = f"{query} in {location}" if location else query
+            self.log(
+                f"GRID MODE: ~{plan['cells']} cells of {plan['cell']:.2f} km "
+                f"at zoom {opts['zoom']}"
+            )
+            opts["grid_bbox"] = geocode.format_bbox(plan["bbox"])
+            opts["grid_cell"] = round(plan["cell"], 3)
+            self._clip_bbox = plan["bbox"]
         else:
             search_line = f"{query} in {location}" if location else query
             self.log(f"SEARCH MODE: '{search_line}' (target {target})")
+            if target > SINGLE_SEARCH_CEILING:
+                self.log(
+                    f"  Note: a single search returns about "
+                    f"{SINGLE_SEARCH_CEILING} places, so the target of {target} "
+                    f"is unlikely to be reached without grid coverage."
+                )
 
         with open(os.path.join(work_dir, "queries.txt"), "w") as f:
             f.write(search_line + "\n")

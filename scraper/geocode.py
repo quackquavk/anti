@@ -105,3 +105,16 @@ def point_in_bbox(lat, lon, bbox):
         return False
     min_lat, min_lon, max_lat, max_lon = bbox
     return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
+
+
+# A longitude span this wide means the box wraps the antimeridian rather than
+# describing a contiguous area. Countries with far-flung territories report one:
+# "United States" comes back as -180..180 because of the Aleutians and American
+# Samoa, so the box covers most of the planet and Frankfurt sits inside it.
+DEGENERATE_LON_SPAN_DEG = 180.0
+
+
+def spans_antimeridian(bbox):
+    """True if this bbox wraps the globe and is useless as a search area."""
+    _, min_lon, _, max_lon = bbox
+    return (max_lon - min_lon) >= DEGENERATE_LON_SPAN_DEG
