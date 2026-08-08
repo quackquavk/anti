@@ -118,3 +118,34 @@ def spans_antimeridian(bbox):
     """True if this bbox wraps the globe and is useless as a search area."""
     _, min_lon, _, max_lon = bbox
     return (max_lon - min_lon) >= DEGENERATE_LON_SPAN_DEG
+
+
+# Roughly how wide a Google Maps viewport is at each zoom level. Used to pick a
+# zoom whose viewport covers the area we're aiming at, so the search isn't
+# centred correctly but zoomed into one street.
+_ZOOM_BY_SPAN_KM = (
+    (3, 16),
+    (8, 14),
+    (25, 12),
+    (80, 10),
+    (250, 8),
+    (800, 6),
+    (2500, 4),
+)
+
+MIN_SEARCH_RADIUS_M = 2_000
+MAX_SEARCH_RADIUS_M = 2_000_000
+
+
+def zoom_for_span(span_km):
+    """Pick a zoom level whose viewport roughly covers `span_km`."""
+    for threshold, zoom in _ZOOM_BY_SPAN_KM:
+        if span_km <= threshold:
+            return zoom
+    return 3
+
+
+def radius_for_span(span_km):
+    """Search radius in metres covering `span_km`, clamped to something sane."""
+    radius = (span_km / 2.0) * 1000.0
+    return int(max(MIN_SEARCH_RADIUS_M, min(MAX_SEARCH_RADIUS_M, radius)))

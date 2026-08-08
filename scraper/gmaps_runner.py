@@ -267,34 +267,62 @@ class GmapsRunner:
 
     # ------------------------------------------------------------------- main
 
-    def _plan_grid(self, location, config):
-        """Decide whether this location can sensibly be grid-scraped.
+    def _plan_area(self, location, config, want_grid):
+        """Work out how to aim the scraper at `location`.
 
-        Returns a plan dict, or None to fall back to a plain search. Grid mode
-        suits a neighbourhood or city; a country cannot be covered this way, and
-        pretending otherwise produces results from the wrong continent.
+        Returns one of:
+          {"mode": "grid",     bbox, cell, cells}  - tile the area
+          {"mode": "anchored", lat, lon, zoom, radius} - one search, centred there
+          None - location could not be resolved at all
+
+        The anchored mode matters more than it looks: Google geolocates by the
+        requesting IP, so an un-anchored search run from a Frankfurt VPS returns
+        Frankfurt businesses no matter what location the query names.
         """
         try:
-            self.log(f"Resolving bounding box for '{location}'...")
+            self.log(f"Resolving location '{location}'...")
             place = geocode.lookup(location)
         except geocode.GeocodeError as e:
-            self.log(f"  Geocoding failed ({e}); using a plain search instead.")
+            self.log(
+                f"  Could not resolve '{location}' ({e}). Falling back to an "
+                f"unanchored search, which may return results near the server "
+                f"rather than the requested area."
+            )
             return None
 
         bbox = place["bbox"]
         self.log(f"  Matched: {place['display_name']}")
 
+        def anchored(reason=None):
+            if reason:
+                self.log(reason)
+            width, height = geocode.bbox_dimensions_km(bbox)
+            zoom = geocode.zoom_for_span(max(width, height))
+            radius = geocode.radius_for_span(max(width, height))
+            self.log(
+                f"  Centring search on {place['lat']:.4f},{place['lon']:.4f} "
+                f"at zoom {zoom} (radius {radius / 1000:,.0f} km)"
+            )
+            return {
+                "mode": "anchored",
+                "lat": place["lat"],
+                "lon": place["lon"],
+                "zoom": zoom,
+                "radius": radius,
+            }
+
+        if not want_grid:
+            return anchored()
+
         # Countries with overseas territories report a box wrapping the globe.
         # Gridding it scatters searches across the planet, and the bbox is so
         # wide that clipping cannot reject the strays either.
         if geocode.spans_antimeridian(bbox):
-            self.log(
+            return anchored(
                 f"  '{location}' spans the antimeridian, so its bounding box "
                 f"covers most of the globe and cannot be gridded. "
-                f"Using a plain search instead - narrow to a city or region "
-                f"for grid coverage."
+                f"Narrow to a city or region for grid coverage."
             )
-            return None
 
         width, height = geocode.bbox_dimensions_km(bbox)
         self.log(f"  Area: {width:,.1f} x {height:,.1f} km")
@@ -316,17 +344,15 @@ class GmapsRunner:
                 )
 
         if cell > MAX_GRID_CELL_KM:
-            self.log(
+            return anchored(
                 f"  '{location}' is too large to grid: covering it within "
                 f"max_grid_cells={max_cells} needs {cell:,.0f} km cells, well "
                 f"past the {MAX_GRID_CELL_KM} km a single search covers at this "
                 f"zoom, so most of the area would never be visited. "
-                f"Using a plain search instead - scrape city by city for "
-                f"full coverage."
+                f"Scrape city by city for full coverage."
             )
-            return None
 
-        return {"bbox": bbox, "cell": cell, "cells": cells}
+        return {"mode": "grid", "bbox": bbox, "cell": cell, "cells": cells}
 
     def run(self, job_id, config):
         """Execute a scrape. Returns the list of unique normalized results."""
@@ -358,10 +384,12 @@ class GmapsRunner:
 
         # Grid mode only pays for itself past the single-search ceiling.
         plan = None
-        if target > SINGLE_SEARCH_CEILING and location:
-            plan = self._plan_grid(location, config)
+        if location:
+            plan = self._plan_area(
+                location, config, want_grid=target > SINGLE_SEARCH_CEILING
+            )
 
-        if plan:
+        if plan and plan["mode"] == "grid":
             search_line = query
             self.log(
                 f"GRID MODE: ~{plan['cells']} cells of {plan['cell']:.2f} km "
@@ -373,6 +401,13 @@ class GmapsRunner:
         else:
             search_line = f"{query} in {location}" if location else query
             self.log(f"SEARCH MODE: '{search_line}' (target {target})")
+
+            if plan and plan["mode"] == "anchored":
+                # Without this the search inherits the server's own location.
+                opts["geo"] = f"{plan['lat']:.6f},{plan['lon']:.6f}"
+                opts["zoom"] = plan["zoom"]
+                opts["radius"] = plan["radius"]
+
             if target > SINGLE_SEARCH_CEILING:
                 self.log(
                     f"  Note: a single search returns about "
