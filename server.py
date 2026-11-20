@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime, timezone
 import threading
+import time
 import shutil
 import json
 import os
@@ -158,15 +159,41 @@ def job_status(job_id):
     return job.get("status") if job else None
 
 
+# Waiting jobs in arrival order. Only the head of the line may take a free
+# slot, so the position a job is shown ("2 ahead") is the order it will run in.
+wait_queue = []
+queue_lock = threading.Lock()
+
+
+def queue_ahead(job_id):
+    """How many waiting jobs are ahead of this one. None if it is not queued."""
+    with queue_lock:
+        try:
+            return wait_queue.index(str(job_id))
+        except ValueError:
+            return None
+
+
 def wait_for_slot(job_id):
     """Block until this job may run. False if it was cancelled while queued."""
-    while not job_slots.acquire(timeout=2):
-        if job_status(job_id) != "pending":
-            return False
-    if job_status(job_id) != "pending":
-        job_slots.release()
-        return False
-    return True
+    try:
+        while True:
+            if job_status(job_id) != "pending":
+                return False
+            with queue_lock:
+                first = bool(wait_queue) and wait_queue[0] == job_id
+            if not first:
+                time.sleep(2)
+                continue
+            if job_slots.acquire(timeout=2):
+                if job_status(job_id) != "pending":
+                    job_slots.release()
+                    return False
+                return True
+    finally:
+        with queue_lock:
+            if job_id in wait_queue:
+                wait_queue.remove(job_id)
 
 
 def run_scraper(job_id, config):
@@ -290,7 +317,10 @@ def clean_config(raw):
 
 @app.route("/api/jobs", methods=["GET"])
 def list_jobs():
-    """List all jobs, newest first. Optionally filter by user_id."""
+    """List jobs, newest first. Optionally filter by user_id.
+
+    ?limit=N returns up to N (default 50, at most 500).
+    """
     user_id = request.args.get("user_id")
     query = {}
     if user_id:
@@ -298,13 +328,17 @@ def list_jobs():
         
     # The list view only shows status and counts. Shipping results and logs
     # here made each poll ~14 MB, which got the Atlas cluster throttled.
+    limit = request.args.get("limit", default=50, type=int) or 50
+    limit = max(1, min(limit, 500))
     jobs = list(
         jobs_collection.find(query, {"results": 0, "logs": 0})
         .sort("created_at", -1)
-        .limit(50)
+        .limit(limit)
     )
     for job in jobs:
         job["_id"] = str(job["_id"])
+        if job.get("status") == "pending":
+            job["queue_ahead"] = queue_ahead(job["_id"])
     return jsonify(jobs)
 
 @app.route("/api/jobs", methods=["POST"])
@@ -341,6 +375,9 @@ def create_job():
     result = jobs_collection.insert_one(job)
     job_id = str(result.inserted_id)
     
+    with queue_lock:
+        wait_queue.append(job_id)
+
     # Start job in background thread
     thread = threading.Thread(target=run_job_thread, args=(job_id, config))
     thread.daemon = True
@@ -389,6 +426,8 @@ def get_job(job_id):
         if not job:
             return jsonify({"error": "Job not found"}), 404
         job["_id"] = str(job["_id"])
+        if job.get("status") == "pending":
+            job["queue_ahead"] = queue_ahead(job["_id"])
 
         results = job.get("results", [])
         job["results_offset"] = since

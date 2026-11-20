@@ -518,6 +518,82 @@ ol {
   white-space: nowrap;
 }
 
+/* Reuse: appears on the row under the pointer or keyboard focus, so the list
+   stays quiet at rest. Touch screens have no hover, so it is always there. */
+.nav-row {
+  position: relative;
+}
+
+.nav-reuse {
+  position: absolute;
+  top: 50%;
+  right: var(--s-1);
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--fast) var(--ease), background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.nav-row:hover .nav-reuse,
+.nav-row:focus-within .nav-reuse {
+  opacity: 1;
+}
+
+.nav-reuse:hover {
+  background: var(--bg-active, var(--border));
+  color: var(--text);
+}
+
+.nav-row:hover .nav-item,
+.nav-row:focus-within .nav-item {
+  padding-right: calc(1.75rem + var(--s-2));
+  background: var(--bg-hover);
+}
+
+@media (hover: none) {
+  .nav-reuse {
+    opacity: 1;
+  }
+
+  .nav-item {
+    padding-right: calc(1.75rem + var(--s-2));
+  }
+}
+
+.nav-more {
+  width: 100%;
+  margin-top: var(--s-1);
+  padding: var(--s-2);
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.nav-more:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.nav-more:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .nav-empty {
   padding: var(--s-2);
   font-size: var(--t-sm);
@@ -1331,10 +1407,12 @@ details[open] > summary .advanced__chevron {
   color: var(--bg);
 }
 
+/* 12 in 18 leaves a whole 3px all round. At 11 the margin was 3.5px, which
+   put the glyph on half pixels and made the tick read as off-centre. */
 .status__mark .icon {
-  width: 0.6875rem;
-  height: 0.6875rem;
-  stroke-width: 2.75;
+  width: 0.75rem;
+  height: 0.75rem;
+  stroke-width: 2.5;
 }
 
 .status--ok {

@@ -13,6 +13,8 @@
   const PAGE_SIZE = 200;
   const PREFS_KEY = "gms.prefs.v1";
 
+  const LIST_PAGE = 50;
+
   const state = {
     jobs: null, // sidebar list, without results
     route: { name: "new", id: null },
@@ -27,7 +29,14 @@
     prevStatus: new Map(),
     finishedWhileAway: null,
     firstRoute: true,
+    listLimit: LIST_PAGE, // how many past searches the sidebar asks for
+    hasOlder: false,
+    viaLink: false, // the route change came from a click, not Back/Forward
+    restoreY: null, // scroll position to return to once the rows are in
   };
+
+  // Deleted in the page but not yet on the server: the Undo window.
+  const pendingDeletes = new Map();
 
   const cache = { list: "", table: "", rows: "", log: "", suggestions: "" };
   let pollTimer = null;
@@ -137,7 +146,10 @@
     return data;
   }
 
-  function toast(message, action) {
+  // onGone runs when the message leaves without its action being used.
+  function toast(message, action, onGone) {
+    let used = false;
+    let gone = false;
     const el = document.createElement("div");
     el.className = "toast";
     const text = document.createElement("span");
@@ -149,6 +161,7 @@
       btn.className = "toast__action";
       btn.textContent = action.label;
       btn.addEventListener("click", () => {
+        used = true;
         action.run();
         dismiss();
       });
@@ -178,7 +191,10 @@
     el.addEventListener("focusout", release);
 
     function dismiss() {
+      if (gone) return;
+      gone = true;
       clearTimeout(timer);
+      if (!used && onGone) onGone();
       el.classList.add("is-leaving");
       setTimeout(() => el.remove(), 220);
     }
@@ -186,11 +202,36 @@
 
   // ---------------------------------------------------------------- sidebar
 
+  // Why a search is waiting, in three lengths. The server reports how many
+  // waiting searches are ahead; without that number the copy stays general.
+  function waitingOf(job) {
+    const ahead = job.queue_ahead;
+    if (ahead === 0) {
+      return {
+        meta: "Waiting · next in line",
+        title: "Next in line",
+        text: "Other searches are running. This one starts on its own as soon as one of them finishes.",
+      };
+    }
+    if (ahead > 0) {
+      return {
+        meta: `Waiting · ${fmt(ahead)} ahead`,
+        title: `${fmt(ahead)} ${plural(ahead, "search", "searches")} ahead of this one`,
+        text: `Searches run a few at a time, in the order they were asked for. This one starts on its own after the ${ahead === 1 ? "one" : fmt(ahead)} ahead of it.`,
+      };
+    }
+    return {
+      meta: "Waiting to start",
+      title: "Waiting for its turn",
+      text: "Other searches are running. This one starts on its own as soon as there is room.",
+    };
+  }
+
   function metaOf(job) {
     const n = job.results_count || 0;
     switch (job.status) {
       case "pending":
-        return "Waiting to start";
+        return waitingOf(job).meta;
       case "running":
         if (!n) return "Searching";
         return isOpenEnded(job) ? `Searching · ${fmt(n)} found` : `Searching · ${fmt(n)} of ${fmt(targetOf(job))}`;
@@ -228,12 +269,16 @@
       html = state.jobs
         .map((job) => {
           const current = state.route.name === "search" && state.route.id === job._id;
-          return `<li><a class="nav-item" href="#/s/${esc(job._id)}"${current ? ' aria-current="page"' : ""}>
+          const reuse = (job.config || {}).search_query
+            ? `<button class="nav-reuse" type="button" data-reuse="${esc(job._id)}" title="Reuse in a new search" aria-label="Reuse ${esc(titleOf(job))} in a new search"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-refresh" /></svg></button>`
+            : "";
+          return `<li class="nav-row"><a class="nav-item" href="#/s/${esc(job._id)}"${current ? ' aria-current="page"' : ""}>
             <span class="dot ${job.status === "completed" && !job.results_count ? "" : dotOf(job.status)}" aria-hidden="true"></span>
             <span><span class="nav-item__title">${esc(titleOf(job))}</span>
-            <span class="nav-item__meta">${esc(metaOf(job))}</span></span></a></li>`;
+            <span class="nav-item__meta">${esc(metaOf(job))}</span></span></a>${reuse}</li>`;
         })
         .join("");
+      if (state.hasOlder) html += '<li><button class="nav-more" type="button" id="olderBtn">Show older searches</button></li>';
     }
     if (html === cache.list) return;
     cache.list = html;
@@ -242,12 +287,47 @@
 
     // Keep keyboard users where they were across a re-render.
     const focusedHref = document.activeElement?.closest?.("#searchList a")?.getAttribute("href");
+    const focusedOlder = document.activeElement?.id === "olderBtn";
+    const focusedReuse = document.activeElement?.closest?.("#searchList .nav-reuse")?.dataset.reuse;
     list.innerHTML = html;
     if (focusedHref) list.querySelector(`a[href="${focusedHref}"]`)?.focus();
+    if (focusedReuse) list.querySelector(`.nav-reuse[data-reuse="${focusedReuse}"]`)?.focus();
+    if (focusedOlder) $("olderBtn")?.focus();
   }
 
+  // Reuse a past search without opening it: fill the form and stop there.
+  $("searchList").addEventListener("click", (e) => {
+    const btn = e.target.closest(".nav-reuse");
+    if (!btn) return;
+    const job = (state.jobs || []).find((j) => j._id === btn.dataset.reuse);
+    if (job) searchAgain(job);
+  });
+
+  $("searchList").addEventListener("click", async (e) => {
+    const btn = e.target.closest("#olderBtn");
+    if (!btn) return;
+    const had = (state.jobs || []).length;
+    btn.disabled = true;
+    btn.textContent = "Loading";
+    state.listLimit += LIST_PAGE;
+    try {
+      await refreshList();
+      // Land on the first search that was not there before.
+      $("searchList").querySelectorAll(".nav-item")[had]?.focus();
+    } catch {
+      state.listLimit -= LIST_PAGE;
+      btn.disabled = false;
+      btn.textContent = "Show older searches";
+      toast("We could not load older searches. Check your connection and try again.");
+    }
+  });
+
   async function refreshList() {
-    const jobs = await api("/api/jobs");
+    // One more than shown: a full answer means there are older ones to offer.
+    const asked = state.listLimit;
+    let jobs = await api(`/api/jobs?limit=${asked + 1}`);
+    state.hasOlder = jobs.length > asked;
+    jobs = jobs.slice(0, asked).filter((j) => !pendingDeletes.has(j._id));
     for (const job of jobs) {
       const before = state.prevStatus.get(job._id);
       if (before && ACTIVE.has(before) && !ACTIVE.has(job.status)) announceFinished(job);
@@ -274,7 +354,7 @@
         : job.status === "error"
         ? `${title} did not finish.`
         : `${title} has stopped. ${businesses(n)} kept.`;
-    toast(message, viewing ? null : { label: "View", run: () => (location.hash = `#/s/${job._id}`) });
+    toast(message, viewing ? null : { label: "View", run: () => go(`#/s/${job._id}`) });
   }
 
   // ------------------------------------------------------------ search view
@@ -293,7 +373,7 @@
     const kept = n ? ` The ${businesses(n)} found ${plural(n, "is", "are")} kept.` : "";
     switch (job.status) {
       case "pending":
-        return "Another search is running. This one starts on its own as soon as there is room.";
+        return `${waitingOf(job).text} You can close this page.`;
       case "running":
         if (!n) return "You can close this page; the search keeps going.";
         return `Businesses appear below as they are found. Running for ${duration(job.started_at || job.created_at)}. You can close this page; the search keeps going.`;
@@ -473,7 +553,7 @@
       foot.hidden = true;
       const again = { label: "Edit and search again", primary: true, run: () => searchAgain(job) };
       if (job.status === "pending") {
-        setEmpty("Waiting for its turn", "Another search is running. This one starts on its own as soon as there is room.");
+        setEmpty(waitingOf(job).title, "Nothing to do until then. Cancel the search if you no longer need it.");
       } else if (ACTIVE.has(job.status)) {
         // The table's own shape, pulsing, says "rows are coming" better than
         // a paragraph does.
@@ -746,6 +826,40 @@
     }
   }
 
+  // Back and Forward return to the same place in a list, with as many rows
+  // showing as before. Opening a search from a link starts at the top.
+  const scrollKey = (id) => `gms.scroll.${id}`;
+  let scrollTimer = null;
+
+  function saveScroll() {
+    clearTimeout(scrollTimer);
+    if (state.route.name !== "search" || !state.job || state.restoreY !== null) return;
+    try {
+      sessionStorage.setItem(scrollKey(state.route.id), JSON.stringify({ y: Math.round(window.scrollY), limit: state.limit }));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  function loadScroll(id) {
+    try {
+      const v = JSON.parse(sessionStorage.getItem(scrollKey(id)));
+      if (v && v.y > 0) return v;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(saveScroll, 150);
+    },
+    { passive: true }
+  );
+
   function loadView(id) {
     try {
       const v = JSON.parse(sessionStorage.getItem(viewKey(id)));
@@ -772,7 +886,7 @@
   }
 
   async function refreshDetail(force) {
-    if (state.route.name !== "search" || detailBusy) return;
+    if (state.route.name !== "search" || detailBusy || pendingDeletes.has(state.route.id)) return;
     if (!force && state.job && !ACTIVE.has(state.job.status)) return;
 
     const id = state.route.id;
@@ -801,7 +915,12 @@
       if (first) state.seen = state.results.length; // nothing is "new" on open
       state.prevStatus.set(job._id, job.status);
       renderSearch();
+      if (first && state.restoreY !== null) {
+        window.scrollTo(0, state.restoreY);
+        state.restoreY = null;
+      }
     } catch (err) {
+      state.restoreY = null;
       if (err.status === 404 || err.status === 400) {
         if (state.route.id === id) showMissing();
       }
@@ -955,46 +1074,80 @@
 
   $("againBtn").addEventListener("click", () => state.job && searchAgain(state.job));
 
+  // Deleting a finished search needs no question: it leaves the list at once
+  // and Undo brings it back. The server is only told once the message goes.
+  // A running search still asks, because deleting it also stops it.
   $("deleteBtn").addEventListener("click", () => {
     const job = state.job;
     if (!job) return;
+    if (!ACTIVE.has(job.status)) {
+      pendingDeletes.set(job._id, job);
+      hideJob(job);
+      toast(`Deleted “${titleOf(job)}”.`, { label: "Undo", run: () => undoDelete(job) }, () => commitDelete(job));
+      return;
+    }
     const n = Math.max(job.results_count || 0, state.results.length);
-    const list = n ? `its list of ${businesses(n)}` : "it";
     confirmAction(
       {
         title: "Delete this search?",
-        text: ACTIVE.has(job.status)
-          ? `This search is still running. Deleting it stops it and removes ${list} for good.`
-          : `This removes “${titleOf(job)}” and ${list} for good. Download the CSV first if you still need it.`,
+        text: `This search is still ${job.status === "pending" ? "waiting" : "running"}. Deleting it stops it and removes ${n ? `its list of ${businesses(n)}` : "it"} for good.`,
         confirmLabel: "Delete search",
         cancelLabel: "Keep it",
       },
-      deleteSearch
+      () => {
+        pendingDeletes.set(job._id, job);
+        hideJob(job);
+        commitDelete(job, true);
+      }
     );
   });
 
-  async function deleteSearch() {
-    if (!state.job) return;
-    const job = state.job;
+  function hideJob(job) {
+    state.jobs = (state.jobs || []).filter((j) => j._id !== job._id);
+    go("#/new");
+    renderList();
+  }
+
+  function undoDelete(job) {
+    pendingDeletes.delete(job._id);
+    go(`#/s/${job._id}`);
+    tick();
+  }
+
+  async function commitDelete(job, announce) {
+    if (!pendingDeletes.has(job._id)) return;
     try {
       await api(`/api/jobs/${job._id}`, { method: "DELETE" });
     } catch (err) {
       if (err.status !== 404) {
-        toast("We could not delete the search. Check your connection and try again.");
+        pendingDeletes.delete(job._id);
+        toast(`We could not delete “${titleOf(job)}”, so it is back in your list.`);
+        tick();
         return;
       }
     }
-    state.jobs = (state.jobs || []).filter((j) => j._id !== job._id);
+    pendingDeletes.delete(job._id);
     state.prevStatus.delete(job._id);
     try {
       sessionStorage.removeItem(viewKey(job._id));
+      sessionStorage.removeItem(scrollKey(job._id));
     } catch {
       /* ignore */
     }
-    toast("Search deleted.");
-    location.hash = "#/new";
-    renderList();
+    if (announce) toast("Search deleted.");
   }
+
+  // Leaving with an Undo still on screen: the delete was asked for, so it goes
+  // through rather than quietly coming back next visit.
+  window.addEventListener("pagehide", () => {
+    for (const id of pendingDeletes.keys()) {
+      try {
+        fetch(`/api/jobs/${id}`, { method: "DELETE", keepalive: true });
+      } catch {
+        /* nothing more to do on the way out */
+      }
+    }
+  });
 
   // --------------------------------------------------------------- the form
 
@@ -1106,8 +1259,15 @@
     if (c.grid_cell_km) $("gridCell").value = c.grid_cell_km;
     if (c.zoom_level) $("zoom").value = c.zoom_level;
     clearErrors();
+    updateTotalHint();
+    if (state.route.name !== "search") {
+      // Already on the form: no route change will come to move focus.
+      go("#/new");
+      $("submitBtn").focus();
+      return;
+    }
     state.focusSubmit = true;
-    location.hash = "#/new";
+    go("#/new");
   }
 
   form.addEventListener("change", (e) => {
@@ -1224,7 +1384,7 @@
       state.prevStatus.set(data.job_id, "pending");
       // What was typed stays in the form: the next search is usually a small
       // change to this one (same trade, next town).
-      location.hash = `#/s/${data.job_id}`;
+      go(`#/s/${data.job_id}`);
     } catch (err) {
       const fields = err.fields || {};
       if (fields.search_query) setError("fieldQuery", "qError", fields.search_query);
@@ -1262,11 +1422,38 @@
     $("missingTitle").focus();
   }
 
+  // Every in-app move goes through a link or go(), so a route change that
+  // arrives unmarked is Back, Forward or a reload.
+  function go(hash) {
+    markLink();
+    location.hash = hash;
+  }
+
+  function markLink() {
+    state.viaLink = true;
+    setTimeout(() => (state.viaLink = false), 200);
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest?.('a[href^="#/"]')) markLink();
+  }, true);
+
   function onRoute() {
     const next = parseRoute();
     const changed = next.name !== state.route.name || next.id !== state.route.id;
+    const returning = !state.viaLink;
+    state.viaLink = false;
+    if (changed) saveScroll(); // the page has not moved yet: this is where they were
     state.route = next;
+    state.restoreY = null;
     closeSidebar();
+
+    if (next.name === "search" && pendingDeletes.has(next.id)) {
+      state.job = null;
+      showMissing();
+      state.firstRoute = false;
+      return;
+    }
 
     if (next.name === "search") {
       if (changed || !state.job) {
@@ -1275,6 +1462,11 @@
         state.seen = 0;
         state.limit = PAGE_SIZE;
         state.shown = null;
+        const place = returning ? loadScroll(next.id) : null;
+        if (place) {
+          state.limit = Math.max(PAGE_SIZE, Number(place.limit) || PAGE_SIZE);
+          state.restoreY = place.y;
+        }
         const saved = loadView(next.id);
         state.sort = saved ? saved.sort : { key: null, dir: 1 };
         state.filters = saved ? { email: false, phone: false, website: false, rated: false, ...saved.filters } : { email: false, phone: false, website: false, rated: false };
@@ -1287,8 +1479,8 @@
       }
       show("viewSearch");
       renderSearch();
-      if (!state.firstRoute) $("sTitle").focus();
-      window.scrollTo(0, 0);
+      if (!state.firstRoute) $("sTitle").focus({ preventScroll: true });
+      if (state.restoreY === null) window.scrollTo(0, 0);
     } else {
       show("viewNew");
       $("crumbHere").textContent = "New search";
