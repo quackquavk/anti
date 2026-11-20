@@ -2,1010 +2,352 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Google Maps Scraper</title>
-    <style>
-      :root {
-        --bg-dark: #0f0f1a;
-        --bg-card: #1a1a2e;
-        --bg-input: #252540;
-        --accent: #6366f1;
-        --accent-hover: #818cf8;
-        --success: #22c55e;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-        --text: #e2e8f0;
-        --text-muted: #94a3b8;
-        --border: #334155;
-      }
-
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-        background: var(--bg-dark);
-        color: var(--text);
-        min-height: 100vh;
-        padding: 2rem;
-      }
-
-      .container {
-        max-width: 1100px;
-        margin: 0 auto;
-      }
-
-      h1 {
-        font-size: 2rem;
-        background: linear-gradient(135deg, var(--accent), #a855f7);
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
-      }
-
-      .subtitle {
-        color: var(--text-muted);
-        margin-bottom: 2rem;
-      }
-
-      .grid-layout {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1.5rem;
-      }
-
-      @media (max-width: 900px) {
-        .grid-layout {
-          grid-template-columns: 1fr;
+    <meta name="description" content="Find businesses on Google Maps and download their contact details as a spreadsheet." />
+    <meta name="theme-color" content="#fafafa" id="themeColor" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2318181b'/%3E%3Cpath d='M16 25s6-5.300 6-9.500a6 6 0 1 0-12 0c0 4.200 6 9.500 6 9.500z' fill='none' stroke='%23fff' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='15.500' r='2' fill='%23fff'/%3E%3C/svg%3E" />
+    <script>
+      // Set before first paint so the page never flashes the wrong theme.
+      (function () {
+        var theme;
+        try { theme = localStorage.getItem("gms.theme"); } catch (e) {}
+        if (theme !== "dark" && theme !== "light") {
+          theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
-      }
-
-      .card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        padding: 1.5rem;
-        border: 1px solid var(--border);
-      }
-
-      .jobs-card {
-        display: flex;
-        flex-direction: column;
-        height: calc(100vh - 180px);
-        min-height: 400px;
-      }
-
-      .jobs-card .card-title {
-        flex-shrink: 0;
-      }
-
-      .card-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-      }
-
-      .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-      }
-
-      .form-group.full-width {
-        grid-column: span 2;
-      }
-
-      label {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-        font-weight: 500;
-      }
-
-      input[type="text"],
-      input[type="number"] {
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        color: var(--text);
-        font-size: 1rem;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      }
-
-      input:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-      }
-
-      .toggle-container {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding-top: 0.5rem;
-      }
-
-      .toggle {
-        position: relative;
-        width: 48px;
-        height: 26px;
-      }
-
-      .toggle input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-
-      .toggle-slider {
-        position: absolute;
-        cursor: pointer;
-        inset: 0;
-        background: var(--bg-input);
-        border-radius: 26px;
-        transition: 0.3s;
-      }
-
-      .toggle-slider:before {
-        position: absolute;
-        content: "";
-        height: 20px;
-        width: 20px;
-        left: 3px;
-        bottom: 3px;
-        background: var(--text);
-        border-radius: 50%;
-        transition: 0.3s;
-      }
-
-      .toggle input:checked + .toggle-slider {
-        background: var(--accent);
-      }
-      .toggle input:checked + .toggle-slider:before {
-        transform: translateX(22px);
-      }
-
-      .btn {
-        padding: 0.75rem 1.5rem;
-        border: none;
-        border-radius: 8px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .btn-primary {
-        background: var(--accent);
-        color: white;
-      }
-      .btn-primary:hover {
-        background: var(--accent-hover);
-        transform: translateY(-1px);
-      }
-      .btn-danger {
-        background: var(--danger);
-        color: white;
-      }
-      .btn-success {
-        background: var(--success);
-        color: white;
-      }
-      .btn-sm {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.85rem;
-      }
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      /* Jobs List */
-      .jobs-list {
-        flex: 1;
-        overflow-y: auto;
-        min-height: 0;
-      }
-
-      .job-item {
-        background: var(--bg-input);
-        border-radius: 12px;
-        padding: 1rem;
-        margin-bottom: 0.75rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: 1px solid transparent;
-      }
-
-      .job-item:hover {
-        border-color: var(--accent);
-      }
-      .job-item.selected {
-        border-color: var(--accent);
-        background: rgba(99, 102, 241, 0.1);
-      }
-
-      .job-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-      }
-
-      .job-query {
-        font-weight: 600;
-        font-size: 0.95rem;
-      }
-
-      .job-meta {
-        display: flex;
-        gap: 1rem;
-        font-size: 0.8rem;
-        color: var(--text-muted);
-      }
-
-      .badge {
-        padding: 0.25rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-      }
-
-      .badge-pending {
-        background: var(--bg-dark);
-        color: var(--text-muted);
-      }
-      .badge-running {
-        background: rgba(34, 197, 94, 0.2);
-        color: var(--success);
-      }
-      .badge-completed {
-        background: rgba(34, 197, 94, 0.3);
-        color: var(--success);
-      }
-      .badge-stopped {
-        background: rgba(245, 158, 11, 0.2);
-        color: var(--warning);
-      }
-      .badge-error {
-        background: rgba(239, 68, 68, 0.2);
-        color: var(--danger);
-      }
-      .badge-stopping {
-        background: rgba(245, 158, 11, 0.2);
-        color: var(--warning);
-      }
-      .badge-interrupted {
-        background: rgba(148, 163, 184, 0.2);
-        color: var(--text-muted);
-      }
-
-      /* Job Details Panel */
-      .job-details {
-        display: none;
-      }
-
-      .job-details.active {
-        display: block;
-      }
-
-      .detail-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid var(--border);
-      }
-
-      .detail-label {
-        color: var(--text-muted);
-      }
-      .detail-value {
-        font-weight: 500;
-      }
-
-      /* ---- progress ---- */
-      .progress-track {
-        height: 6px;
-        background: var(--bg-input);
-        border-radius: 3px;
-        overflow: hidden;
-        margin: 1rem 0 0.35rem;
-      }
-      .progress-fill {
-        height: 100%;
-        background: var(--accent);
-        border-radius: 3px;
-        transition: width 0.4s ease;
-      }
-      .progress-fill.done {
-        background: var(--success);
-      }
-      .progress-caption {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        display: flex;
-        justify-content: space-between;
-      }
-
-      /* ---- live results table ---- */
-      .results-wrap {
-        margin-top: 1rem;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        overflow: auto;
-        max-height: 420px;
-      }
-      .results-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.8rem;
-      }
-      .results-table thead th {
-        position: sticky;
-        top: 0;
-        background: var(--bg-input);
-        color: var(--text-muted);
-        text-align: left;
-        font-weight: 500;
-        padding: 0.5rem 0.65rem;
-        white-space: nowrap;
-        z-index: 1;
-      }
-      .results-table td {
-        padding: 0.5rem 0.65rem;
-        border-top: 1px solid var(--border);
-        vertical-align: top;
-      }
-      .results-table tbody tr:hover {
-        background: rgba(99, 102, 241, 0.07);
-      }
-      .cell-name {
-        font-weight: 500;
-        min-width: 170px;
-      }
-      .cell-sub {
-        color: var(--text-muted);
-        font-size: 0.72rem;
-        margin-top: 0.15rem;
-      }
-      .cell-mono {
-        font-family: "Fira Code", "SF Mono", monospace;
-        white-space: nowrap;
-      }
-      .cell-empty {
-        color: var(--border);
-      }
-      .cell-rating {
-        white-space: nowrap;
-      }
-      .results-empty {
-        padding: 2rem 1rem;
-        text-align: center;
-        color: var(--text-muted);
-        font-size: 0.85rem;
-      }
-
-      /* ---- collapsible activity log ---- */
-      .log-toggle {
-        margin-top: 0.85rem;
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        font-size: 0.75rem;
-        cursor: pointer;
-        padding: 0.25rem 0;
-        font-family: inherit;
-      }
-      .log-toggle:hover {
-        color: var(--text);
-      }
-
-      .console {
-        background: #0d0d14;
-        border-radius: 8px;
-        padding: 1rem;
-        height: 160px;
-        overflow-y: auto;
-        font-family: "Fira Code", "SF Mono", monospace;
-        font-size: 0.75rem;
-        line-height: 1.5;
-        margin-top: 0.5rem;
-      }
-      .console.hidden {
-        display: none;
-      }
-
-      .console::-webkit-scrollbar {
-        width: 6px;
-      }
-      .console::-webkit-scrollbar-thumb {
-        background: var(--border);
-        border-radius: 3px;
-      }
-
-      .log-entry {
-        color: var(--text-muted);
-        margin-bottom: 0.25rem;
-      }
-      .log-entry.error {
-        color: var(--danger);
-      }
-      .log-entry.success {
-        color: var(--success);
-      }
-
-      .action-buttons {
-        display: flex;
-        gap: 0.5rem;
-        margin-top: 1rem;
-      }
-
-      .empty-state {
-        text-align: center;
-        padding: 3rem;
-        color: var(--text-muted);
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-      }
-
-      .pulse {
-        animation: pulse 1.5s infinite;
-      }
-    </style>
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/inter-latin-var.woff2') }}" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ asset_v }}" />
   </head>
   <body>
-    <div class="container">
-      <h1>🗺️ Google Maps Scraper</h1>
-      <p class="subtitle">
-        Start multiple scraping jobs and track their progress
-      </p>
+    <!-- Icon sprite: one stroke weight, one grid, drawn once. -->
+    <svg class="sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.200 7-11a7 7 0 1 0-14 0c0 4.800 7 11 7 11z" /><circle cx="12" cy="10" r="2.500" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.500" /><path d="m20 20-4-4" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.500 4.500 4.500L19 7.500" /></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.500" y="6.500" width="11" height="11" rx="2" /></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.300-4.300L4 8.500M4 4v4.500h4.500M4 13a8 8 0 0 0 14.300 4.300L20 15.500M20 20v-4.500h-4.500" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500" /><path d="M12 11v5M12 8h.010" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.500h18L12 4zM12 10v4.500M12 17h.010" /></symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24"><path d="m8 10 4-4 4 4M8 14l4 4 4-4" /></symbol>
+      <symbol id="i-sort-up" viewBox="0 0 24 24"><path d="m7 14 5-5 5 5" /></symbol>
+      <symbol id="i-sort-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-5" /></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.600 5.600 7 7M17 17l1.400 1.400M5.600 18.400 7 17M17 7l1.400-1.400" /></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.500A8 8 0 0 1 9.500 4a8 8 0 1 0 10.500 10.500z" /></symbol>
+      <symbol id="i-bang" viewBox="0 0 24 24"><path d="M12 6v7M12 17.500h.010" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6.500 12h11" /></symbol>
+      <symbol id="i-hands" viewBox="0 0 24 24"><path d="M12 6.500V12l3.500 2" /></symbol>
+      <symbol id="i-square" viewBox="0 0 24 24"><rect x="7.500" y="7.500" width="9" height="9" rx="1" fill="currentColor" /></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.500" y="5.500" width="17" height="13" rx="2" /><path d="m4 7.500 8 6 8-6" /></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><path d="M8.500 4H6a2 2 0 0 0-2 2c0 7.700 6.300 14 14 14a2 2 0 0 0 2-2v-2.500l-4.500-1.500-1.500 2a9 9 0 0 1-4-4l2-1.500L8.500 4z" /></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4 2.500 5.100 5.500.800-4 3.900.900 5.600L12 16.800l-4.900 2.600.900-5.600-4-3.900 5.500-.800L12 4z" /></symbol>
+    </svg>
 
-      <div class="grid-layout">
-        <!-- Left Column: New Job Form -->
-        <div>
-          <div class="card">
-            <h2 class="card-title">➕ New Scraping Job</h2>
-            <form id="configForm">
-              <div class="form-grid">
-                <div class="form-group">
-                  <label for="search_query">Search Query</label>
-                  <input
-                    type="text"
-                    id="search_query"
-                    value="restaurant"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label for="location">Location</label>
-                  <input type="text" id="location" value="Kathmandu" required />
-                </div>
-                <div class="form-group">
-                  <label for="total">Total Results</label>
-                  <input
-                    type="number"
-                    id="total"
-                    value="100"
-                    min="1"
-                    max="10000"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label for="grid_cell_km">Grid Cell (km)</label>
-                  <input
-                    type="number"
-                    id="grid_cell_km"
-                    value="1"
-                    min="0.2"
-                    max="20"
-                    step="0.1"
-                  />
-                </div>
-                <div class="form-group">
-                  <label for="zoom_level">Zoom Level</label>
-                  <input
-                    type="number"
-                    id="zoom_level"
-                    value="15"
-                    min="10"
-                    max="21"
-                  />
-                </div>
-                <div class="form-group">
-                  <label>Extract Emails</label>
-                  <div class="toggle-container">
-                    <label class="toggle">
-                      <input type="checkbox" id="extractEmail" checked />
-                      <span class="toggle-slider"></span>
-                    </label>
-                    <span id="extractEmailLabel">On</span>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="app">
+      <aside class="sidebar" id="sidebar" aria-label="Your searches">
+        <div class="sidebar__head">
+          <a class="brand" href="#/new">
+            <span class="brand__mark"><svg class="icon"><use href="#i-pin" /></svg></span>
+            <span class="brand__name">Google Maps Scraper</span>
+          </a>
+          <button class="icon-btn sidebar__close" id="sidebarClose" type="button" aria-label="Close menu">
+            <svg class="icon"><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <div class="sidebar__body">
+          <a class="btn btn--primary btn--block" href="#/new" id="newSearchLink">
+            <svg class="icon"><use href="#i-plus" /></svg>
+            New search
+          </a>
+          <h2 class="sidebar__label" id="recentLabel">Recent searches</h2>
+          <nav aria-labelledby="recentLabel">
+            <ul class="nav-list" id="searchList">
+              <li class="nav-skeleton"><span></span><span></span></li>
+              <li class="nav-skeleton"><span></span><span></span></li>
+              <li class="nav-skeleton"><span></span><span></span></li>
+            </ul>
+          </nav>
+        </div>
+      </aside>
+      <div class="scrim" id="scrim" hidden></div>
+
+      <div class="main">
+        <header class="topbar">
+          <button class="icon-btn topbar__menu" id="menuBtn" type="button" aria-label="Open your searches" aria-controls="sidebar" aria-expanded="false">
+            <svg class="icon"><use href="#i-menu" /></svg>
+          </button>
+          <nav class="crumbs" aria-label="Breadcrumb">
+            <span class="crumbs__root">Searches</span>
+            <svg class="icon icon--sm crumbs__sep" aria-hidden="true"><use href="#i-chevron" /></svg>
+            <span class="crumbs__here" id="crumbHere" aria-current="page">New search</span>
+          </nav>
+          <button class="icon-btn topbar__theme" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+            <svg class="icon theme-icon--moon" aria-hidden="true"><use href="#i-moon" /></svg>
+            <svg class="icon theme-icon--sun" aria-hidden="true"><use href="#i-sun" /></svg>
+          </button>
+        </header>
+
+        <div class="offline" id="offline" role="status" hidden>
+          <svg class="icon"><use href="#i-alert" /></svg>
+          <span>We can't reach the server right now. Your searches keep running; this page will catch up on its own.</span>
+        </div>
+
+        <main id="main" tabindex="-1">
+          <!-- ============ New search ============ -->
+          <section class="view view--new" id="viewNew" aria-labelledby="newTitle">
+            <div class="new">
+              <h1 class="new__title" id="newTitle" tabindex="-1">Find businesses and their contact details</h1>
+              <p class="new__lead">
+                Get a list with phone numbers, emails, and websites that you can download as a spreadsheet.
+              </p>
+
+              <form class="card form" id="searchForm" novalidate>
+                <div class="searchbar">
+                  <div class="field" id="fieldQuery">
+                    <label class="field__label" for="q">What kind of business?</label>
+                    <div class="input-wrap">
+                      <svg class="icon input-wrap__icon"><use href="#i-search" /></svg>
+                      <input class="input input--lg" type="text" id="q" name="search_query" placeholder="e.g. dentists" maxlength="120" autocomplete="off" autocapitalize="off" enterkeyhint="next" aria-describedby="qError" />
+                    </div>
+                    <p class="field__error" id="qError" hidden></p>
+                  </div>
+                  <div class="field" id="fieldLocation">
+                    <label class="field__label" for="loc">Where?</label>
+                    <div class="input-wrap">
+                      <svg class="icon input-wrap__icon"><use href="#i-pin" /></svg>
+                      <input class="input input--lg" type="text" id="loc" name="location" placeholder="City, e.g. Austin, TX" maxlength="120" autocomplete="off" enterkeyhint="search" aria-describedby="locError" />
+                    </div>
+                    <p class="field__error" id="locError" hidden></p>
+                  </div>
+                  <div class="searchbar__go">
+                    <button class="btn btn--primary btn--lg" type="submit" id="submitBtn">
+                      <span class="btn__label">Find businesses</span>
+                      <svg class="icon"><use href="#i-arrow-right" /></svg>
+                    </button>
                   </div>
                 </div>
-                <div class="form-group full-width">
-                  <button
-                    type="submit"
-                    class="btn btn-primary"
-                    style="width: 100%"
-                  >
-                    🚀 Start New Job
+                <p class="form__status" id="formStatus" role="alert" hidden></p>
+
+                <fieldset class="field field--group" id="fieldTotal">
+                  <legend class="field__label">How many businesses?</legend>
+                  <div class="choices" id="totalChoices">
+                    <label class="choice"><input type="radio" name="total" value="50" /><span>50</span></label>
+                    <label class="choice"><input type="radio" name="total" value="100" checked /><span>100</span></label>
+                    <label class="choice"><input type="radio" name="total" value="250" /><span>250</span></label>
+                    <label class="choice"><input type="radio" name="total" value="500" /><span>500</span></label>
+                    <label class="choice choice--wide"><input type="radio" name="total" value="max" /><span>As many as possible</span></label>
+                    <label class="choice choice--other"><input type="radio" name="total" value="other" /><span>Other</span></label>
+                  </div>
+                  <div class="field field--inline" id="customTotalWrap" hidden>
+                    <label class="field__label" for="customTotal">Number of businesses</label>
+                    <input class="input input--narrow" type="number" id="customTotal" min="1" max="10000" step="1" inputmode="numeric" placeholder="e.g. 150" aria-describedby="totalError" />
+                  </div>
+                  <p class="field__hint" id="totalHint" aria-live="polite"></p>
+                  <p class="field__error" id="totalError" hidden></p>
+                </fieldset>
+
+                <div class="form__extras">
+                  <label class="option" for="email">
+                    <input class="checkbox" type="checkbox" id="email" name="email" checked aria-describedby="emailHint" />
+                    <span class="option__text">
+                      <span class="option__title">Also find email addresses</span>
+                      <span class="option__hint" id="emailHint">Slower: we visit each business's website to look for one.</span>
+                    </span>
+                  </label>
+
+                  <details class="advanced" id="advanced">
+                    <summary class="advanced__summary">
+                      <svg class="icon icon--sm advanced__chevron"><use href="#i-chevron" /></svg>
+                      Advanced options
+                    </summary>
+                    <div class="advanced__body">
+                      <p class="advanced__note">
+                        These only matter for searches over 120 businesses, where we cover the area square by square. The defaults suit most searches.
+                      </p>
+                      <div class="form__row">
+                        <div class="field">
+                          <label class="field__label" for="gridCell">Square size (km)</label>
+                          <input class="input" type="number" id="gridCell" name="grid_cell_km" value="1" min="0.2" max="20" step="0.1" inputmode="decimal" aria-describedby="gridHint" />
+                          <p class="field__hint" id="gridHint">Smaller squares find more businesses but take longer. Default 1.</p>
+                        </div>
+                        <div class="field">
+                          <label class="field__label" for="zoom">Map zoom</label>
+                          <input class="input" type="number" id="zoom" name="zoom_level" value="15" min="10" max="21" step="1" inputmode="numeric" aria-describedby="zoomHint" />
+                          <p class="field__hint" id="zoomHint">How closely we look at each square, from 10 to 21. Default 15.</p>
+                        </div>
+                      </div>
+                      <button class="btn btn--sm" type="button" id="resetAdvanced">Reset to defaults</button>
+                    </div>
+                  </details>
+                </div>
+              </form>
+
+              <div class="examples" id="examples">
+                <span class="examples__label">Try an example:</span>
+                <button class="chip" type="button" data-q="Coffee shops" data-loc="Portland, OR"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-search" /></svg>Coffee shops in Portland, OR</button>
+                <button class="chip" type="button" data-q="Plumbers" data-loc="Leeds, UK"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-search" /></svg>Plumbers in Leeds, UK</button>
+                <button class="chip" type="button" data-q="Law firms" data-loc="Toronto"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-search" /></svg>Law firms in Toronto</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ One search ============ -->
+          <section class="view view--search" id="viewSearch" aria-labelledby="sTitle" hidden>
+            <div class="page">
+              <div class="page__head">
+                <div class="page__titles">
+                  <div class="page__title-row">
+                    <h1 class="page__title" id="sTitle" tabindex="-1"></h1>
+                    <span class="status" id="sBadge"></span>
+                  </div>
+                  <p class="page__sub" id="sSub"></p>
+                  <p class="page__place" id="sPlace" hidden></p>
+                </div>
+                <div class="page__actions">
+                  <button class="btn btn--icon page__delete" type="button" id="deleteBtn" aria-label="Delete this search" title="Delete this search">
+                    <svg class="icon"><use href="#i-trash" /></svg>
                   </button>
+                  <button class="btn" type="button" id="stopBtn" hidden>
+                    <svg class="icon"><use href="#i-stop" /></svg>
+                    <span class="btn__label">Stop search</span>
+                  </button>
+                  <button class="btn" type="button" id="againBtn" hidden>
+                    <svg class="icon"><use href="#i-refresh" /></svg>
+                    Search again
+                  </button>
+                  <a class="btn btn--lead" id="downloadBtn" role="button" aria-disabled="true">
+                    <svg class="icon"><use href="#i-download" /></svg>
+                    <span id="downloadLabel">Download CSV</span>
+                  </a>
                 </div>
               </div>
-            </form>
-          </div>
 
-          <!-- Job Details Panel -->
-          <div
-            class="card job-details"
-            id="jobDetails"
-            style="margin-top: 1.5rem"
-          >
-            <h2 class="card-title">📋 Job Details</h2>
-            <div id="detailsContent">
-              <div class="detail-row">
-                <span class="detail-label">Status</span>
-                <span class="detail-value" id="detailStatus">-</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Query</span>
-                <span class="detail-value" id="detailQuery">-</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Location</span>
-                <span class="detail-value" id="detailLocation">-</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Results</span>
-                <span class="detail-value" id="detailResults">-</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Target</span>
-                <span class="detail-value" id="detailTarget">-</span>
-              </div>
-              <div class="action-buttons">
-                <button
-                  class="btn btn-success btn-sm"
-                  id="exportBtn"
-                  onclick="exportJob()"
-                >
-                  ⬇ Export CSV
-                </button>
-                <button
-                  class="btn btn-danger btn-sm"
-                  id="stopBtn"
-                  onclick="stopJob()"
-                >
-                  ⏹ Stop
-                </button>
-                <button
-                  class="btn btn-sm"
-                  style="background: var(--border)"
-                  id="deleteBtn"
-                  onclick="deleteJob()"
-                >
-                  🗑 Delete
-                </button>
-              </div>
-              <div class="progress-track">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-              </div>
-              <div class="progress-caption">
-                <span id="progressText">No job selected</span>
-                <span id="progressPct"></span>
-              </div>
-
-              <div class="results-wrap" id="resultsWrap">
-                <div class="results-empty" id="resultsEmpty">
-                  Select a job to see its results.
+              <div class="notice" id="sNotice" role="status" hidden>
+                <span class="notice__mark"><svg class="icon" aria-hidden="true"><use id="sNoticeIcon" href="#i-bang" /></svg></span>
+                <div>
+                  <p class="notice__title" id="sNoticeTitle"></p>
+                  <p class="notice__text" id="sNoticeText"></p>
                 </div>
-                <table class="results-table" id="resultsTable" style="display: none">
-                  <thead>
-                    <tr>
-                      <th>Business</th>
-                      <th>Phone</th>
-                      <th>Email</th>
-                      <th>Rating</th>
-                    </tr>
-                  </thead>
-                  <tbody id="resultsBody"></tbody>
-                </table>
               </div>
 
-              <button class="log-toggle" id="logToggle" onclick="toggleLog()">
-                ▸ Show activity log
-              </button>
-              <div class="console hidden" id="console">
-                <div class="log-entry">Select a job to view its log...</div>
-              </div>
-            </div>
-          </div>
-        </div>
+              <dl class="stats" id="stats">
+                <div class="stat">
+                  <dt class="stat__label"><svg class="icon stat__icon--found" aria-hidden="true"><use href="#i-pin" /></svg>Businesses found</dt>
+                  <dd class="stat__value"><span id="stFound">0</span> <span class="stat__aside" id="stFoundOf"></span></dd>
+                  <div class="meter" id="stMeter" role="progressbar" aria-label="Search progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="meter__fill" id="stMeterFill"></span></div>
+                </div>
+                <div class="stat">
+                  <dt class="stat__label"><svg class="icon stat__icon--email" aria-hidden="true"><use href="#i-mail" /></svg>With an email</dt>
+                  <dd class="stat__value"><span id="stEmail">0</span> <span class="stat__aside" id="stEmailPct"></span></dd>
+                </div>
+                <div class="stat">
+                  <dt class="stat__label"><svg class="icon stat__icon--phone" aria-hidden="true"><use href="#i-phone" /></svg>With a phone number</dt>
+                  <dd class="stat__value"><span id="stPhone">0</span> <span class="stat__aside" id="stPhonePct"></span></dd>
+                </div>
+                <div class="stat">
+                  <dt class="stat__label"><svg class="icon stat__icon--rating" aria-hidden="true"><use href="#i-star" /></svg>Average rating</dt>
+                  <dd class="stat__value"><span id="stRating">–</span> <span class="stat__aside" id="stRatingOf"></span></dd>
+                </div>
+              </dl>
 
-        <!-- Right Column: Jobs List -->
-        <div class="card jobs-card">
-          <h2 class="card-title">
-            📊 Jobs
-            <button
-              class="btn btn-sm"
-              style="margin-left: auto; background: var(--bg-input)"
-              onclick="loadJobs()"
-            >
-              🔄 Refresh
-            </button>
-          </h2>
-          <div class="jobs-list" id="jobsList">
-            <div class="empty-state">
-              <p>No jobs yet. Start a new scraping job!</p>
+              <div class="toolbar" id="toolbar">
+                <div class="filters" role="group" aria-label="Filter the list">
+                  <button class="filter" type="button" data-filter="email" aria-pressed="false"><span class="filter__box"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>Has email<span class="filter__count" id="fcEmail">0</span></button>
+                  <button class="filter" type="button" data-filter="phone" aria-pressed="false"><span class="filter__box"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>Has phone<span class="filter__count" id="fcPhone">0</span></button>
+                  <button class="filter" type="button" data-filter="website" aria-pressed="false"><span class="filter__box"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>Has website<span class="filter__count" id="fcWebsite">0</span></button>
+                  <button class="filter" type="button" data-filter="rated" aria-pressed="false"><span class="filter__box"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>Rated 4+<span class="filter__count" id="fcRated">0</span></button>
+                  <button class="btn btn--ghost btn--sm" type="button" id="clearFilters" hidden>Clear filters</button>
+                </div>
+                <div class="input-wrap toolbar__search">
+                  <svg class="icon input-wrap__icon"><use href="#i-search" /></svg>
+                  <label class="sr-only" for="listSearch">Search this list</label>
+                  <input class="input" type="search" id="listSearch" placeholder="Search this list" autocomplete="off" />
+                </div>
+              </div>
+
+              <div class="table-card">
+                <div class="table-scroll">
+                  <table class="table" id="resultsTable" aria-describedby="listSummary">
+                    <colgroup>
+                      <col class="col-name" /><col class="col-phone" /><col class="col-email" /><col class="col-site" /><col class="col-rating" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col" data-sort="name"><button class="th-btn" type="button">Business <svg class="icon icon--sm"><use href="#i-sort" /></svg></button></th>
+                        <th scope="col" data-sort="phone"><button class="th-btn" type="button">Phone <svg class="icon icon--sm"><use href="#i-sort" /></svg></button></th>
+                        <th scope="col" data-sort="email"><button class="th-btn" type="button">Email <svg class="icon icon--sm"><use href="#i-sort" /></svg></button></th>
+                        <th scope="col" data-sort="website"><button class="th-btn" type="button">Website <svg class="icon icon--sm"><use href="#i-sort" /></svg></button></th>
+                        <th scope="col" data-sort="rating"><button class="th-btn" type="button">Rating <svg class="icon icon--sm"><use href="#i-sort" /></svg></button></th>
+                      </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                  </table>
+                </div>
+                <div class="empty" id="emptyState" hidden>
+                  <p class="empty__title" id="emptyTitle"></p>
+                  <p class="empty__text" id="emptyText"></p>
+                  <button class="btn btn--sm" type="button" id="emptyAction" hidden></button>
+                </div>
+                <div class="table-foot" id="tableFoot">
+                  <p class="table-foot__summary" id="listSummary" aria-live="polite"></p>
+                  <div class="table-foot__actions">
+                    <a class="btn btn--ghost btn--sm" id="downloadAll" download hidden></a>
+                    <button class="btn btn--sm" type="button" id="newRows" hidden></button>
+                    <button class="btn btn--sm" type="button" id="showMore" hidden>Show more</button>
+                  </div>
+                </div>
+              </div>
+
+              <details class="tech" id="tech">
+                <summary class="tech__summary">
+                  <svg class="icon icon--sm advanced__chevron"><use href="#i-chevron" /></svg>
+                  Technical details
+                </summary>
+                <div class="tech__body">
+                  <p class="tech__error" id="techError" hidden></p>
+                  <ol class="log" id="log" aria-label="Activity log"></ol>
+                </div>
+              </details>
             </div>
-          </div>
-        </div>
+          </section>
+
+          <!-- ============ Missing search ============ -->
+          <section class="view view--missing" id="viewMissing" hidden>
+            <div class="empty empty--page">
+              <h1 class="empty__title" id="missingTitle" tabindex="-1">This search no longer exists</h1>
+              <p class="empty__text">It may have been deleted. Your other searches are in the list.</p>
+              <a class="btn btn--primary" href="#/new">Start a new search</a>
+            </div>
+          </section>
+        </main>
       </div>
     </div>
 
-    <script>
-      const form = document.getElementById("configForm");
-      const jobsList = document.getElementById("jobsList");
-      const jobDetails = document.getElementById("jobDetails");
-      const consoleEl = document.getElementById("console");
-      const emailCheckbox = document.getElementById("extractEmail");
-      const emailLabel = document.getElementById("extractEmailLabel");
+    <dialog class="dialog" id="deleteDialog" aria-labelledby="deleteTitle" aria-describedby="deleteText">
+      <form method="dialog" class="dialog__form">
+        <h2 class="dialog__title" id="deleteTitle">Delete this search?</h2>
+        <p class="dialog__text" id="deleteText"></p>
+        <div class="dialog__actions">
+          <button class="btn" value="cancel" type="submit" id="cancelDialog">Keep it</button>
+          <button class="btn btn--danger" value="delete" type="submit" id="confirmDelete">Delete search</button>
+        </div>
+      </form>
+    </dialog>
 
-      let selectedJobId = null;
-      let refreshInterval = null;
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-      emailCheckbox.addEventListener("change", () => {
-        emailLabel.textContent = emailCheckbox.checked ? "On" : "Off";
-      });
-
-      function formatDate(dateStr) {
-        if (!dateStr) return "-";
-        const date = new Date(dateStr);
-        return date.toLocaleString();
-      }
-
-      function getBadgeClass(status) {
-        return `badge badge-${status || "pending"}`;
-      }
-
-      // Business names and addresses come from scraped pages, so they are
-      // untrusted input -- never interpolate them into innerHTML raw.
-      function escapeHtml(value) {
-        if (value === null || value === undefined) return "";
-        return String(value)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
-
-      function renderProgress(job) {
-        const found = job.results_count || 0;
-        const target = job.config?.total || 0;
-        const pct = target ? Math.min(100, Math.round((found / target) * 100)) : 0;
-        const done = ["completed", "stopped", "error"].includes(job.status);
-
-        const fill = document.getElementById("progressFill");
-        fill.style.width = `${done ? 100 : pct}%`;
-        fill.classList.toggle("done", done);
-
-        let text;
-        if (job.status === "running") {
-          text = `Scraping... ${found} of ${target} found`;
-        } else if (job.status === "error") {
-          text = job.error ? `Failed: ${job.error}` : "Failed";
-        } else {
-          text = `${found} place${found === 1 ? "" : "s"} found`;
-        }
-        document.getElementById("progressText").textContent = text;
-        document.getElementById("progressPct").textContent =
-          job.status === "running" && target ? `${pct}%` : "";
-      }
-
-      function renderResults(results) {
-        const table = document.getElementById("resultsTable");
-        const empty = document.getElementById("resultsEmpty");
-        const body = document.getElementById("resultsBody");
-
-        if (!results.length) {
-          table.style.display = "none";
-          empty.style.display = "block";
-          empty.textContent = "No results yet.";
-          return;
-        }
-
-        empty.style.display = "none";
-        table.style.display = "table";
-
-        const dash = '<span class="cell-empty">—</span>';
-
-        body.innerHTML = results
-          .map((r) => {
-            const sub = [r.category, r.city].filter(Boolean).join(" · ");
-            const name = r.location_link
-              ? `<a href="${escapeHtml(r.location_link)}" target="_blank"
-                    rel="noopener noreferrer">${escapeHtml(r.name)}</a>`
-              : escapeHtml(r.name);
-
-            const phone = r.phone
-              ? `<span class="cell-mono">${escapeHtml(r.phone)}</span>`
-              : dash;
-
-            const email = r.email
-              ? `<a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>`
-              : dash;
-
-            const rating = r.rating
-              ? `${r.rating} <span class="cell-sub" style="display:inline">
-                   (${r.review_count || 0})</span>`
-              : dash;
-
-            return `<tr>
-              <td class="cell-name">${name}${
-              sub ? `<div class="cell-sub">${escapeHtml(sub)}</div>` : ""
-            }</td>
-              <td>${phone}</td>
-              <td>${email}</td>
-              <td class="cell-rating">${rating}</td>
-            </tr>`;
-          })
-          .join("");
-      }
-
-      function toggleLog() {
-        const el = document.getElementById("console");
-        const btn = document.getElementById("logToggle");
-        const hidden = el.classList.toggle("hidden");
-        btn.textContent = hidden ? "▸ Show activity log" : "▾ Hide activity log";
-        if (!hidden) el.scrollTop = el.scrollHeight;
-      }
-
-      async function loadJobs() {
-        try {
-          const res = await fetch("/api/jobs");
-          const jobs = await res.json();
-
-          if (jobs.length === 0) {
-            jobsList.innerHTML =
-              '<div class="empty-state"><p>No jobs yet. Start a new scraping job!</p></div>';
-            return;
-          }
-
-          jobsList.innerHTML = jobs
-            .map(
-              (job) => `
-                    <div class="job-item ${
-                      job._id === selectedJobId ? "selected" : ""
-                    }" 
-                         onclick="selectJob('${job._id}')">
-                        <div class="job-header">
-                            <span class="job-query">${
-                              job.config?.search_query || "Unknown"
-                            } in ${job.config?.location || "Unknown"}</span>
-                            <span class="${getBadgeClass(job.status)} ${
-                job.status === "running" ? "pulse" : ""
-              }">${job.status}</span>
-                        </div>
-                        <div class="job-meta">
-                            <span>📊 ${job.results_count || 0} / ${
-                job.config?.total || 0
-              }</span>
-                            <span>🕐 ${formatDate(job.created_at)}</span>
-                        </div>
-                    </div>
-                `
-            )
-            .join("");
-        } catch (e) {
-          console.error("Failed to load jobs:", e);
-        }
-      }
-
-      async function selectJob(jobId) {
-        const switching = selectedJobId !== jobId;
-        selectedJobId = jobId;
-        jobDetails.classList.add("active");
-
-        // Clear the previous job's rows so they can't be mistaken for this
-        // job's while the fetch is in flight.
-        if (switching) {
-          document.getElementById("resultsBody").innerHTML = "";
-          document.getElementById("resultsTable").style.display = "none";
-          const empty = document.getElementById("resultsEmpty");
-          empty.style.display = "block";
-          empty.textContent = "Loading...";
-          consoleEl.innerHTML = "";
-        }
-
-        // Highlight selected
-        document
-          .querySelectorAll(".job-item")
-          .forEach((el) => el.classList.remove("selected"));
-        document
-          .querySelector(`[onclick="selectJob('${jobId}')"]`)
-          ?.classList.add("selected");
-
-        await refreshJobDetails();
-      }
-
-      async function refreshJobDetails() {
-        if (!selectedJobId) return;
-
-        try {
-          const res = await fetch(`/api/jobs/${selectedJobId}?slim=1`);
-          const job = await res.json();
-
-          if (job.error && !job.config) {
-            jobDetails.classList.remove("active");
-            selectedJobId = null;
-            return;
-          }
-
-          document.getElementById(
-            "detailStatus"
-          ).innerHTML = `<span class="${getBadgeClass(job.status)}">${
-            job.status
-          }</span>`;
-          document.getElementById("detailQuery").textContent =
-            job.config?.search_query || "-";
-          document.getElementById("detailLocation").textContent =
-            job.config?.location || "-";
-          document.getElementById("detailResults").textContent =
-            job.results_count || 0;
-          document.getElementById("detailTarget").textContent =
-            job.config?.total || "-";
-
-          // Enable/disable buttons
-          document.getElementById("stopBtn").disabled =
-            job.status !== "running";
-          document.getElementById("exportBtn").disabled = !job.has_results;
-
-          renderProgress(job);
-          renderResults(job.results || []);
-
-          // Update console
-          if (job.logs && job.logs.length > 0) {
-            consoleEl.innerHTML = job.logs
-              .map((log) => {
-                const type = log.includes("ERROR")
-                  ? "error"
-                  : log.includes("SUCCESS") || log.includes("completed")
-                  ? "success"
-                  : "";
-                return `<div class="log-entry ${type}">${escapeHtml(log)}</div>`;
-              })
-              .join("");
-            consoleEl.scrollTop = consoleEl.scrollHeight;
-          }
-        } catch (e) {
-          console.error("Failed to load job details:", e);
-        }
-      }
-
-      const submitBtn = form.querySelector('button[type="submit"]');
-      const SUBMIT_COOLDOWN = 10000; // 10 seconds cooldown
-      let isSubmitting = false;
-
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        if (isSubmitting) return;
-        isSubmitting = true;
-        submitBtn.disabled = true;
-        submitBtn.textContent = "🚀 Starting...";
-
-        const config = {
-          search_query: document.getElementById("search_query").value,
-          location: document.getElementById("location").value,
-          total: parseInt(document.getElementById("total").value),
-          grid_cell_km: parseFloat(document.getElementById("grid_cell_km").value),
-          zoom_level: parseInt(document.getElementById("zoom_level").value),
-          email: emailCheckbox.checked,
-        };
-
-        try {
-          const res = await fetch("/api/jobs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config),
-          });
-
-          const data = await res.json();
-
-          if (res.ok) {
-            await loadJobs();
-            selectJob(data.job_id);
-          } else {
-            alert(data.error || "Failed to create job");
-          }
-        } catch (e) {
-          alert("Connection error: " + e.message);
-        } finally {
-          setTimeout(() => {
-            isSubmitting = false;
-            submitBtn.disabled = false;
-            submitBtn.textContent = "🚀 Start New Job";
-          }, SUBMIT_COOLDOWN);
-        }
-      });
-
-      async function stopJob() {
-        if (!selectedJobId) return;
-        try {
-          await fetch(`/api/jobs/${selectedJobId}/stop`, { method: "POST" });
-          await refreshJobDetails();
-          await loadJobs();
-        } catch (e) {
-          alert("Error stopping job: " + e.message);
-        }
-      }
-
-      async function exportJob() {
-        if (!selectedJobId) return;
-        try {
-          const res = await fetch(`/api/jobs/${selectedJobId}/export`);
-          if (res.ok) {
-            const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `job_${selectedJobId}.csv`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-          } else {
-            const data = await res.json();
-            alert(data.error || "Export failed");
-          }
-        } catch (e) {
-          alert("Export error: " + e.message);
-        }
-      }
-
-      async function deleteJob() {
-        if (!selectedJobId) return;
-        if (!confirm("Delete this job?")) return;
-
-        try {
-          await fetch(`/api/jobs/${selectedJobId}`, { method: "DELETE" });
-          jobDetails.classList.remove("active");
-          selectedJobId = null;
-          await loadJobs();
-        } catch (e) {
-          alert("Error deleting job: " + e.message);
-        }
-      }
-
-      // Initial load and auto-refresh
-      loadJobs();
-      refreshInterval = setInterval(() => {
-        loadJobs();
-        if (selectedJobId) refreshJobDetails();
-      }, 3000);
-    </script>
+    <script src="{{ url_for('static', filename='app.js') }}?v={{ asset_v }}" defer></script>
   </body>
 </html>

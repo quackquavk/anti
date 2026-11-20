@@ -1,0 +1,2370 @@
+/* ==========================================================================
+   Google Maps Scraper UI
+   Spacing sits on a 4px base with 8px as the working step. Every margin,
+   padding and gap below uses a --s-* token; if a value is not on the scale it
+   is a control height or a border.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-latin-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* spacing */
+  --s-1: 0.25rem; /* 4 */
+  --s-2: 0.5rem; /* 8 */
+  --s-3: 0.75rem; /* 12 */
+  --s-4: 1rem; /* 16 */
+  --s-5: 1.25rem; /* 20 */
+  --s-6: 1.5rem; /* 24 */
+  --s-8: 2rem; /* 32 */
+  --s-10: 2.5rem; /* 40 */
+  --s-12: 3rem; /* 48 */
+  --s-16: 4rem; /* 64 */
+
+  /* type: fixed rem scale, ~1.15 steps */
+  --t-xs: 0.75rem; /* 12 / 16 */
+  --t-sm: 0.8125rem; /* 13 / 20 */
+  --t-base: 0.875rem; /* 14 / 20 */
+  --t-md: 1rem; /* 16 / 24 */
+  --t-lg: 1.125rem; /* 18 / 28 */
+  --t-xl: 1.5rem; /* 24 / 32 */
+  --t-2xl: 1.875rem; /* 30 / 36 */
+
+  /* neutrals */
+  --bg: #ffffff;
+  --bg-subtle: #fafafa;
+  --bg-muted: #f4f4f5;
+  --bg-hover: #f4f4f5;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text: #18181b;
+  --text-2: #52525b;
+  --text-3: #6b6b74;
+
+  /* Neutral ink does the work of a brand colour: primary actions, selection
+     and the shell are zinc. Blue is kept for links and live state only. */
+  --brand: #18181b;
+  --brand-hover: #2e2e33;
+  --brand-active: #000000;
+  --brand-50: #f4f4f5;
+  --brand-100: #e4e4e7;
+  --brand-200: #d4d4d8;
+  --brand-300: #a1a1aa;
+  --rail: #fafafa;
+  --rail-line: var(--border);
+  --rail-text: #18181b;
+  --rail-muted: #6b6b74;
+  --tint: #fafafa;
+
+  /* roles */
+  --ink: var(--brand);
+  --ink-hover: var(--brand-hover);
+  --on-ink: #ffffff;
+  --link: #1d4ed8;
+  --live: #2563eb;
+  --live-bg: #eff6ff;
+  --live-ring: #dbeafe;
+  --ok: #15803d;
+  --ok-bg: #f0fdf4;
+  --warn: #b45309;
+  --warn-bg: #fffbeb;
+  --warn-border: #fde68a;
+  --danger: #b91c1c;
+  --danger-solid: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --star: #d97706;
+  --text-4: #a1a1aa;
+  --border-hover: #a1a1aa;
+  --card: #ffffff;
+  --rail-current: transparent;
+  --topbar-bg: rgb(255 255 255 / 0.92);
+
+  /* button layers */
+  --key-top: #ffffff;
+  --key-bottom: #f4f4f5;
+  --key-edge: #d4d4d8;
+  --key-edge-hover: #a1a1aa;
+  --key-shine: #ffffff;
+  --key-drop: 0 1px 2px rgb(24 24 27 / 0.08), 0 0 0 3px rgb(24 24 27 / 0.03);
+  --pkey-top: #3f3f46;
+  --pkey-bottom: #18181b;
+  --pkey-top-hover: #52525b;
+  --pkey-bottom-hover: #27272a;
+  --pkey-edge: #09090b;
+  --pkey-shine: rgb(255 255 255 / 0.22);
+  --pkey-ring: rgb(255 255 255 / 0.06);
+  --pkey-drop: 0 1px 2px rgb(24 24 27 / 0.3), 0 3px 8px -2px rgb(24 24 27 / 0.25);
+
+  /* "system voice" surfaces: notices, toasts, the offline strip. Always the
+     inverse of the page, so they stand out in either theme. */
+  --sys-bg: #18181b;
+  --sys-text: #fafafa;
+  --sys-muted: #d4d4d8;
+  --sys-link: #bfdbfe;
+  --sys-warn: #ea580c;
+  --sys-danger: #f87171;
+  --c-email: #6b6b74;
+  --c-phone: #6b6b74;
+  --focus: #2563eb;
+
+  /* shape */
+  --r-sm: 0.375rem; /* 6 */
+  --r: 0.5rem; /* 8 */
+  --r-lg: 0.75rem; /* 12 */
+  --r-xl: 1rem; /* 16 */
+  --shadow-xs: 0 1px 2px rgb(24 24 27 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(24 24 27 / 0.06), 0 1px 3px rgb(24 24 27 / 0.08);
+  --shadow-lg: 0 4px 6px -2px rgb(24 24 27 / 0.05), 0 12px 32px -8px rgb(24 24 27 / 0.18);
+
+  /* sizes */
+  --sidebar-w: 18rem; /* 288 */
+  --topbar-h: 3.5rem; /* 56 */
+  --control-h: 2.25rem; /* 36 */
+  --control-h-sm: 2rem; /* 32 */
+  --control-h-lg: 2.75rem; /* 44 */
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 150ms;
+}
+
+/* ---------- dark theme: the same roles, re-pointed ---------- */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0b0d;
+  --bg-subtle: #111113;
+  --bg-muted: #1f1f23;
+  --bg-hover: #1f1f23;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --border-hover: #71717a;
+  --text: #fafafa;
+  --text-2: #b4b4bd;
+  --text-3: #8f8f99;
+  --text-4: #63636e;
+  --card: #131316;
+  --topbar-bg: rgb(11 11 13 / 0.88);
+
+  --brand: #fafafa;
+  --brand-hover: #e4e4e7;
+  --brand-active: #ffffff;
+  --brand-50: #1f1f23;
+  --brand-100: #27272a;
+  --brand-200: #3f3f46;
+  --brand-300: #71717a;
+  --rail: #111113;
+  --rail-text: #fafafa;
+  --rail-muted: #8f8f99;
+  --rail-current: transparent;
+  --tint: #0b0b0d;
+  --on-ink: #18181b;
+
+  --link: #93c5fd;
+  --live: #60a5fa;
+  --live-bg: #172554;
+  --live-ring: #1e3a8a;
+  --ok: #2f9e5b;
+  --ok-bg: #052e16;
+  --warn: #fbbf24;
+  --warn-bg: #451a03;
+  --warn-border: #78350f;
+  --danger: #f87171;
+  --danger-bg: #450a0a;
+  --danger-border: #7f1d1d;
+  --star: #fbbf24;
+  --focus: #60a5fa;
+
+  /* Nearly the page colour: raised grey keys glowed on a black page and
+     outranked the numbers they sit above. */
+  --key-top: #151518;
+  --key-bottom: #101012;
+  --key-edge: #2e2e33;
+  --key-edge-hover: #52525b;
+  --key-shine: rgb(255 255 255 / 0.04);
+  --key-drop: 0 1px 2px rgb(0 0 0 / 0.5);
+  --pkey-top: #ffffff;
+  --pkey-bottom: #d4d4d8;
+  --pkey-top-hover: #ffffff;
+  --pkey-bottom-hover: #e4e4e7;
+  --pkey-edge: #fafafa;
+  --pkey-shine: #ffffff;
+  --pkey-ring: rgb(255 255 255 / 0);
+  --pkey-drop: 0 1px 2px rgb(0 0 0 / 0.6);
+
+  --sys-bg: #fafafa;
+  --sys-text: #18181b;
+  --sys-muted: #52525b;
+  --sys-link: #1d4ed8;
+  --sys-warn: #fb923c;
+  --sys-danger: #dc2626;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 4px 6px -2px rgb(0 0 0 / 0.4), 0 12px 32px -8px rgb(0 0 0 / 0.7);
+}
+
+/* ---------- base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: var(--t-base);
+  line-height: 1.25rem;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss03";
+  accent-color: var(--ink);
+  caret-color: var(--live);
+}
+
+::selection {
+  background: var(--live-ring);
+  color: var(--text);
+}
+
+h1,
+h2 {
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon--sm {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  z-index: 100;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+/* ---------- shell ---------- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--rail);
+  color: var(--rail-text);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  height: var(--topbar-h);
+  flex: none;
+  padding: 0 var(--s-4);
+  border-bottom: 1px solid var(--rail-line);
+}
+
+.sidebar .icon-btn {
+  color: var(--rail-text);
+}
+
+.sidebar .icon-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* On the rail the button is quiet on purpose: the one loud action on a
+   screen is the page's own (Find businesses, Download). */
+.sidebar .btn--primary {
+  border-color: var(--key-edge);
+  background: linear-gradient(180deg, var(--key-top), var(--key-bottom));
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--key-shine), var(--key-drop);
+}
+
+.sidebar .btn--primary:hover {
+  border-color: var(--key-edge-hover);
+  background: linear-gradient(180deg, var(--key-top), var(--key-top));
+}
+
+.icon-btn.sidebar__close {
+  display: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--t-base);
+  font-weight: 500;
+  border-radius: var(--r-sm);
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+/* A plain glyph, no filled tile: the name of the tool should not be the
+   first thing the eye lands on. */
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  color: var(--text-3);
+}
+
+.brand__mark .icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.brand__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--s-4) var(--s-3) 0;
+}
+
+.sidebar__label {
+  margin: var(--s-6) 0 var(--s-2);
+  padding: 0 var(--s-2);
+  font-size: var(--t-xs);
+  line-height: 1rem;
+  font-weight: 500;
+  color: var(--rail-muted);
+}
+
+.sidebar__body nav {
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(var(--s-3) * -1);
+  padding: 0 var(--s-3) var(--s-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nav-list {
+  display: grid;
+  gap: 2px;
+}
+
+.nav-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: start;
+  padding: var(--s-2);
+  border-radius: var(--r);
+  color: var(--rail-text);
+  transition: background-color var(--fast) var(--ease);
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.nav-item[aria-current="page"] .nav-item__title {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* The open search is marked by darker, medium-weight text only. Any filled
+   box here, white or grey, measured as the heaviest thing on the page. */
+.nav-item[aria-current="page"] {
+  background: var(--rail-current);
+}
+
+/* Regular weight and secondary grey: in a heat map the list of past searches
+   was the heaviest thing on the page, ahead of the results themselves. Only
+   the open search is set darker. */
+.nav-item__title {
+  display: block;
+  overflow: hidden;
+  font-weight: 400;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-item__meta {
+  display: block;
+  overflow: hidden;
+  font-size: var(--t-xs);
+  line-height: 1rem;
+  color: var(--rail-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-empty {
+  padding: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--rail-muted);
+}
+
+.nav-skeleton {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-2);
+}
+
+.nav-skeleton span {
+  height: 0.75rem;
+  border-radius: var(--r-sm);
+  background: var(--bg-muted);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.nav-skeleton span:last-child {
+  width: 55%;
+}
+
+/* Status dots keep their colour (green done, amber interrupted, red failed,
+   grey stopped or empty) so the list can be scanned at a glance, but at 6px
+   instead of 8px so seven of them do not pull the eye into the sidebar. */
+.dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  margin: 0.4375rem 1px 0;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+/* Brighter steps of the status colours, tuned for the dark rail. */
+/* The live dot is the state people look for, so it is the brightest one and
+   its pulse never dims it below the others. */
+.dot--live {
+  background: var(--live);
+  box-shadow: 0 0 0 3px var(--live-ring);
+  animation: breathe-soft 2s ease-in-out infinite;
+}
+
+.dot--ok {
+  background: var(--ok);
+}
+
+.dot--warn {
+  background: var(--warn);
+}
+
+.dot--danger {
+  background: var(--danger-solid);
+}
+
+.scrim {
+  display: none;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: var(--topbar-h);
+  flex: none;
+  padding: 0 var(--s-8);
+  background: var(--topbar-bg);
+  backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-btn.topbar__menu {
+  display: none;
+}
+
+.topbar__theme {
+  margin-left: auto;
+}
+
+.topbar__theme .theme-icon--sun,
+:root[data-theme="dark"] .topbar__theme .theme-icon--moon {
+  display: none;
+}
+
+:root[data-theme="dark"] .topbar__theme .theme-icon--sun {
+  display: block;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--t-sm);
+}
+
+.crumbs__root {
+  color: var(--text-3);
+}
+
+.crumbs__sep {
+  color: var(--border-strong);
+}
+
+.crumbs__here {
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offline {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-8);
+  background: var(--sys-bg);
+  color: var(--sys-text);
+  font-size: var(--t-sm);
+}
+
+.offline .icon {
+  color: var(--sys-warn);
+}
+
+main {
+  flex: 1;
+}
+
+main:focus {
+  outline: none;
+}
+
+/* ---------- buttons ---------- */
+
+/* Buttons are built like small physical keys: a faint top-to-bottom shade, a
+   light inner top edge, a hairline outline and a short drop shadow. Pressing
+   one sinks it a pixel. The layers are tokens, so dark mode only re-points
+   them. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: var(--control-h);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--key-edge);
+  border-radius: var(--r);
+  background: linear-gradient(180deg, var(--key-top), var(--key-bottom));
+  color: var(--text);
+  font-size: var(--t-base);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: inset 0 1px 0 var(--key-shine), var(--key-drop);
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), box-shadow var(--fast) var(--ease), transform 80ms ease-out;
+}
+
+.btn:hover {
+  border-color: var(--key-edge-hover);
+  background: linear-gradient(180deg, var(--key-top), var(--key-top));
+  text-decoration: none;
+}
+
+.btn:active {
+  background: linear-gradient(180deg, var(--key-bottom), var(--key-bottom));
+  box-shadow: inset 0 1px 2px rgb(24 24 27 / 0.12);
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  border-color: var(--pkey-edge);
+  background: linear-gradient(180deg, var(--pkey-top), var(--pkey-bottom));
+  color: var(--on-ink);
+  box-shadow: inset 0 1px 0 var(--pkey-shine), inset 0 0 0 1px var(--pkey-ring), var(--pkey-drop);
+}
+
+.btn--primary:hover {
+  border-color: var(--pkey-edge);
+  background: linear-gradient(180deg, var(--pkey-top-hover), var(--pkey-bottom-hover));
+}
+
+.btn--primary:active {
+  background: linear-gradient(180deg, var(--pkey-bottom), var(--pkey-bottom));
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+/* The main action on a page of data: the same key as its neighbours with a
+   darker outline and bolder label, so the list stays the loudest thing. */
+.btn--lead {
+  border-color: var(--border-hover);
+  font-weight: 600;
+}
+
+.btn--lead:hover {
+  border-color: var(--text);
+}
+
+.btn--danger {
+  border-color: #991b1b;
+  background: linear-gradient(180deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 1px 2px rgb(153 27 27 / 0.4);
+}
+
+.btn--danger:hover {
+  border-color: #991b1b;
+  background: linear-gradient(180deg, #dc2626, #b91c1c);
+}
+
+.btn--ghost,
+.btn--ghost:hover,
+.btn--ghost:active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.btn--ghost {
+  color: var(--text-2);
+}
+
+.btn--ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.btn--sm {
+  height: var(--control-h-sm);
+  padding: 0 var(--s-3);
+  font-size: var(--t-sm);
+}
+
+.btn--lg {
+  height: var(--control-h-lg);
+  padding: 0 var(--s-5);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--icon {
+  width: var(--control-h);
+  padding: 0;
+  color: var(--text-2);
+}
+
+.btn--icon:hover {
+  color: var(--danger);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  border-color: var(--border);
+  background: var(--bg-muted);
+  color: var(--text-3);
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn.is-loading {
+  pointer-events: none;
+}
+
+.btn.is-loading .icon {
+  display: none;
+}
+
+.btn.is-loading::before {
+  content: "";
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex: none;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ---------- form controls ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+.field__label {
+  margin-bottom: var(--s-2);
+  padding: 0;
+  font-size: var(--t-base);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.field__hint {
+  margin-top: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--text-3);
+}
+
+.field__error {
+  margin-top: var(--s-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.field.has-error .field__hint {
+  display: none;
+}
+
+.input-wrap {
+  position: relative;
+}
+
+.input-wrap__icon {
+  position: absolute;
+  top: 50%;
+  left: var(--s-3);
+  color: var(--text-3);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.input-wrap .input {
+  padding-left: 2.25rem;
+}
+
+.input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--t-base);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  appearance: none;
+}
+
+.input::placeholder {
+  color: var(--text-3);
+  opacity: 1;
+}
+
+.input:hover {
+  border-color: var(--border-hover);
+}
+
+.input:focus {
+  border-color: var(--focus);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--live-ring);
+}
+
+.input--lg {
+  height: var(--control-h-lg);
+  font-size: var(--t-md);
+}
+
+.input--narrow {
+  width: 9rem;
+}
+
+.field.has-error .input {
+  border-color: var(--danger-solid);
+}
+
+.field.has-error .input:focus {
+  box-shadow: 0 0 0 3px var(--danger-border);
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* segmented choices: real radios, drawn as buttons */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 2.4fr) minmax(0, 1.2fr);
+  gap: var(--s-2);
+}
+
+.choice {
+  position: relative;
+  display: block;
+}
+
+.choice input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.choice span {
+  display: grid;
+  place-items: center;
+  height: var(--control-h);
+  padding: 0 var(--s-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  background: var(--bg);
+  font-size: var(--t-base);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: var(--shadow-xs);
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+
+.choice input:hover + span {
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+}
+
+/* Tinted, not solid: in a squint test a solid selection competed with the
+   submit button, and a form should have one loudest thing. */
+.choice input:checked + span {
+  border-color: var(--text-2);
+  background: var(--bg-muted);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.choice input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.field--inline .field__label {
+  margin-bottom: 0;
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+/* checkbox row */
+.option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-3);
+  align-items: start;
+  cursor: pointer;
+}
+
+.checkbox {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 1px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  cursor: pointer;
+  appearance: none;
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.checkbox::after {
+  content: "";
+  width: 0.625rem;
+  height: 0.375rem;
+  border-left: 2px solid var(--on-ink);
+  border-bottom: 2px solid var(--on-ink);
+  opacity: 0;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.checkbox:checked {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.checkbox:checked::after {
+  opacity: 1;
+}
+
+.option__title {
+  font-weight: 500;
+}
+
+.option__hint {
+  margin-left: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--text-3);
+}
+
+/* disclosure */
+.advanced__summary,
+.tech__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-1);
+  margin-left: calc(var(--s-1) * -1);
+  border-radius: var(--r-sm);
+  font-size: var(--t-base);
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.advanced__summary::-webkit-details-marker,
+.tech__summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced__summary:hover,
+.tech__summary:hover {
+  color: var(--text);
+}
+
+.advanced__chevron {
+  transition: transform var(--fast) var(--ease);
+}
+
+details[open] > summary .advanced__chevron {
+  transform: rotate(90deg);
+}
+
+.advanced__body {
+  display: grid;
+  gap: var(--s-4);
+  justify-items: start;
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.advanced__body .form__row {
+  width: 100%;
+}
+
+.advanced__note {
+  max-width: 65ch;
+  font-size: var(--t-sm);
+  color: var(--text-2);
+}
+
+/* ---------- new search ---------- */
+
+.view--new {
+  min-height: calc(100dvh - var(--topbar-h));
+  padding: var(--s-10) var(--s-8) var(--s-16);
+  background: var(--tint);
+}
+
+.new {
+  width: 100%;
+  max-width: 50rem; /* 800 */
+  margin: 0 auto;
+}
+
+.new__title {
+  font-size: var(--t-2xl);
+  line-height: 2.25rem;
+  letter-spacing: -0.025em;
+}
+
+.new__title:focus {
+  outline: none;
+}
+
+.new__lead {
+  max-width: 60ch;
+  margin-top: var(--s-3);
+  font-size: var(--t-md);
+  line-height: 1.5rem;
+  color: var(--text-2);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.form {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-6);
+  padding: var(--s-6);
+}
+
+/* One row does the whole job: what, where, go. The button used to sit at the
+   foot of the card, below the fold on a 768px-high laptop. */
+.searchbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--s-3);
+  align-items: start;
+}
+
+/* Lines the button up with the inputs, which sit under a label. */
+.searchbar__go {
+  padding-top: 1.75rem;
+}
+
+.form__extras {
+  display: grid;
+  gap: var(--s-4);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--border);
+}
+
+.form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.form__status {
+  margin-top: calc(var(--s-3) * -1);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-6);
+}
+
+.examples__label {
+  margin-right: var(--s-1);
+  font-size: var(--t-sm);
+  color: var(--text-3);
+}
+
+/* Example searches: small buttons with a search glyph, so they read as
+   "run this", not as tags. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: var(--control-h-sm);
+  padding: 0 var(--s-3) 0 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.chip .icon {
+  color: var(--text-3);
+}
+
+.chip:hover {
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+  color: var(--brand-active);
+}
+
+.chip:hover .icon {
+  color: var(--brand);
+}
+
+/* ---------- one search ---------- */
+
+.page {
+  display: grid;
+  gap: var(--s-6);
+  width: 100%;
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: var(--s-8) var(--s-8) var(--s-16);
+}
+
+.page > * {
+  min-width: 0;
+}
+
+.page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4) var(--s-6);
+}
+
+.page__titles {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+
+.page__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.page__title {
+  font-size: var(--t-xl);
+  line-height: 2rem;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.page__title:focus {
+  outline: none;
+}
+
+.page__sub {
+  max-width: 70ch;
+  margin-top: var(--s-1);
+  color: var(--text-2);
+}
+
+.page__place {
+  max-width: 70ch;
+  margin-top: var(--s-1);
+  font-size: var(--t-sm);
+  color: var(--text-3);
+}
+
+.page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* The destructive action stands apart from the ones people use every time. */
+.page__delete {
+  margin-right: var(--s-3);
+}
+
+/* Status: a filled glyph that names the state, then the word. Each state has
+   its own mark (a turning ring while searching, a check when done), so the
+   state reads from its shape and not only from its colour. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.status__mark {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  border-radius: 50%;
+  background: #71717a;
+  color: var(--bg);
+}
+
+.status__mark .icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  stroke-width: 2.75;
+}
+
+.status--ok {
+  color: var(--text-2);
+}
+
+.status--ok .status__mark {
+  background: var(--ok);
+}
+
+.status--warn {
+  color: var(--text-2);
+}
+
+.status--warn .status__mark {
+  background: var(--warn);
+}
+
+.status--danger {
+  color: var(--danger);
+}
+
+.status--danger .status__mark {
+  background: var(--danger-solid);
+}
+
+.status--live {
+  color: var(--link);
+}
+
+/* While something is in progress the mark is a ring that turns. */
+.status--live .status__mark,
+.status--busy .status__mark {
+  border: 2px solid var(--live-ring);
+  border-top-color: var(--live);
+  background: none;
+  animation: spin 0.9s linear infinite;
+}
+
+.status--busy {
+  color: var(--warn);
+}
+
+.status--busy .status__mark {
+  border-color: var(--warn-border);
+  border-top-color: var(--warn);
+}
+
+.status--live .status__mark .icon,
+.status--busy .status__mark .icon {
+  display: none;
+}
+
+/* Notice. Two strengths, set by a heat-map test. Something worth knowing
+   about a usable list is one plain line with a small orange mark: it must not
+   outrank the title or the numbers. Only a failed search gets a panel. */
+.notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-2);
+  align-items: start;
+  color: var(--text-2);
+}
+
+.notice__mark {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--sys-warn);
+  color: var(--bg);
+}
+
+.notice__mark .icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  stroke-width: 3;
+}
+
+.notice__title {
+  display: inline;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.notice__title::after {
+  content: ". ";
+}
+
+.notice__text {
+  display: inline;
+}
+
+.notice > div {
+  max-width: 85ch;
+}
+
+.notice--danger {
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r);
+  background: var(--bg-muted);
+}
+
+.notice--danger .notice__mark {
+  background: var(--danger-solid);
+  color: var(--bg-muted);
+}
+
+.notice--danger .notice__title {
+  display: block;
+  font-weight: 600;
+}
+
+.notice--danger .notice__title::after {
+  content: none;
+}
+
+.notice--danger .notice__text {
+  display: block;
+  margin-top: 2px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+.stat {
+  position: relative;
+  padding: var(--s-4) var(--s-5) var(--s-5);
+  border-left: 1px solid var(--border);
+}
+
+.stat:first-child {
+  border-left: 0;
+}
+
+.stat__label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--text-2);
+}
+
+.stat__icon--found {
+  color: var(--text-3);
+}
+
+.stat__icon--email {
+  color: var(--c-email);
+}
+
+.stat__icon--phone {
+  color: var(--c-phone);
+}
+
+.stat__icon--rating {
+  color: var(--text-3);
+}
+
+.stat__value {
+  margin-top: var(--s-1);
+  font-size: var(--t-2xl);
+  line-height: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat__aside {
+  font-size: var(--t-sm);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+
+.meter {
+  position: absolute;
+  right: var(--s-5);
+  bottom: var(--s-2);
+  left: var(--s-5);
+  height: 0.1875rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-muted);
+}
+
+.meter__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--live);
+  transition: width 400ms var(--ease);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: calc(var(--s-3) * -1);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* Filters are checkboxes in everything but markup: a box that fills when on,
+   the label, and how many businesses it would leave. Deliberately low-key:
+   no shadow, no solid fill, grey not ink, so a row of four never competes
+   with the list underneath it. */
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: var(--control-h-sm);
+  padding: 0 var(--s-3) 0 var(--s-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: transparent;
+  font-size: var(--t-sm);
+  font-weight: 400;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.filter:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.filter__box {
+  display: grid;
+  place-items: center;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.1875rem;
+  color: transparent;
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.filter__box .icon {
+  width: 0.5625rem;
+  height: 0.5625rem;
+  stroke-width: 3;
+}
+
+.filter__count {
+  margin-left: var(--s-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.filter[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.filter[aria-pressed="true"] .filter__box {
+  border-color: var(--text-2);
+  background: var(--text-2);
+  color: var(--bg);
+}
+
+.toolbar__search {
+  flex: 0 1 16rem;
+  min-width: 12rem;
+}
+
+.toolbar__search .input {
+  height: var(--control-h-sm);
+  font-size: var(--t-sm);
+}
+
+.table-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* Fixed layout: columns hold their place while rows stream in and filters
+   change, so the row being read never moves sideways. */
+.table {
+  width: 100%;
+  min-width: 46rem;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-name {
+  width: 28%;
+}
+
+.col-phone {
+  width: 14%;
+}
+
+.col-email {
+  width: 26%;
+}
+
+.col-site {
+  width: 21%;
+}
+
+.col-rating {
+  width: 11%;
+}
+
+.table.no-email .col-email,
+.table.no-email th:nth-child(3),
+.table.no-email td:nth-child(3) {
+  display: none;
+}
+
+.table.no-email .col-name {
+  width: 38%;
+}
+
+.table.no-email .col-site {
+  width: 27%;
+}
+
+.table.no-email .col-phone {
+  width: 20%;
+}
+
+.table.no-email .col-rating {
+  width: 15%;
+}
+
+.table th {
+  height: 2.5rem;
+  padding: 0 var(--s-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--tint);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.th-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: 1.75rem;
+  margin: 0 calc(var(--s-2) * -1);
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.th-btn:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.th-btn .icon {
+  color: var(--text-3);
+}
+
+th[aria-sort="ascending"] .th-btn,
+th[aria-sort="descending"] .th-btn {
+  color: var(--text);
+}
+
+th[aria-sort="ascending"] .th-btn .icon,
+th[aria-sort="descending"] .th-btn .icon {
+  color: var(--text);
+}
+
+.table td {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--bg-muted);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr {
+  transition: background-color var(--fast) var(--ease);
+}
+
+.table tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+.cell-name__title,
+.cell-name__meta,
+.cell-clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-name__title {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+a.cell-name__title:hover {
+  color: var(--link);
+}
+
+.cell-name__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  line-height: 1rem;
+  color: var(--text-3);
+}
+
+/* Contact details are the payload, so email is set in full-strength text.
+   It was blue, which reads lighter than black: in the heat map the email
+   column all but vanished next to the business names. */
+.table td a[href^="mailto:"] {
+  color: var(--text);
+}
+
+.table td a[href^="mailto:"]:hover {
+  color: var(--link);
+}
+
+.cell-site a {
+  color: var(--text-2);
+}
+
+.cell-site a:hover {
+  color: var(--link);
+}
+
+.cell-nowrap {
+  white-space: nowrap;
+}
+
+.cell-none {
+  color: var(--text-4);
+}
+
+.cell-rating {
+  white-space: nowrap;
+}
+
+.cell-rating .icon {
+  display: inline-block;
+  margin-right: 2px;
+  vertical-align: -2px;
+  fill: var(--star);
+  stroke: var(--star);
+}
+
+.cell-rating__num {
+  display: inline-block;
+  min-width: 1.75rem;
+}
+
+.cell-rating__count {
+  color: var(--text-3);
+}
+
+tr.is-new {
+  animation: row-in 600ms var(--ease);
+}
+
+.skeleton-row td {
+  padding: var(--s-4);
+}
+
+.skeleton-bar {
+  display: block;
+  height: 0.75rem;
+  border-radius: var(--r-sm);
+  background: var(--bg-muted);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.empty {
+  display: grid;
+  gap: var(--s-2);
+  justify-items: center;
+  padding: var(--s-12) var(--s-6);
+  text-align: center;
+}
+
+.empty__title {
+  font-size: var(--t-md);
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+
+.empty__text {
+  max-width: 48ch;
+  color: var(--text-2);
+}
+
+.empty .btn {
+  margin-top: var(--s-2);
+}
+
+.empty--page {
+  padding: var(--s-16) var(--s-6);
+}
+
+.empty--page .empty__title {
+  font-size: var(--t-xl);
+  line-height: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.empty--page .empty__title:focus {
+  outline: none;
+}
+
+.table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: 3rem;
+  padding: var(--s-2) var(--s-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.table-foot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.table-foot__summary {
+  font-size: var(--t-sm);
+  color: var(--text-2);
+}
+
+.tech__body {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg-subtle);
+}
+
+.tech__error {
+  margin-bottom: var(--s-3);
+  font-size: var(--t-sm);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.log {
+  display: grid;
+  gap: var(--s-1);
+  max-height: 16rem;
+  overflow-y: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: var(--t-xs);
+  line-height: 1.125rem;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.log li:empty::before {
+  content: "Nothing logged yet.";
+}
+
+/* ---------- dialog ---------- */
+
+.dialog {
+  width: min(26rem, calc(100vw - var(--s-8)));
+  margin: auto; /* the global margin reset would pin it to the corner */
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.dialog::backdrop {
+  background: rgb(24 24 27 / 0.4);
+}
+
+.dialog[open] {
+  animation: pop 180ms var(--ease);
+}
+
+.dialog__form {
+  padding: var(--s-6);
+}
+
+.dialog__title {
+  font-size: var(--t-lg);
+  line-height: 1.75rem;
+  letter-spacing: -0.01em;
+}
+
+.dialog__text {
+  margin-top: var(--s-2);
+  color: var(--text-2);
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  margin-top: var(--s-6);
+}
+
+/* ---------- toasts ---------- */
+
+.toasts {
+  position: fixed;
+  right: var(--s-6);
+  bottom: var(--s-6);
+  z-index: 60;
+  display: grid;
+  gap: var(--s-2);
+  justify-items: end;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  max-width: min(26rem, calc(100vw - var(--s-8)));
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r);
+  background: var(--sys-bg);
+  color: var(--sys-text);
+  font-size: var(--t-sm);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: toast-in 220ms var(--ease);
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.toast__action {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sys-link);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toast__close {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  margin: 0 calc(var(--s-2) * -1) 0 calc(var(--s-2) * -1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--sys-muted);
+  cursor: pointer;
+}
+
+.toast__close:hover {
+  color: var(--sys-text);
+}
+
+.toast__action:hover {
+  text-decoration: underline;
+}
+
+/* ---------- motion ---------- */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes breathe-soft {
+  50% {
+    box-shadow: 0 0 0 5px rgb(219 234 254 / 0.4);
+  }
+}
+
+@keyframes row-in {
+  from {
+    background: var(--live-bg);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 64rem) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .stat:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 56rem) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(20rem, 86vw);
+    box-shadow: var(--shadow-lg);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition: transform 220ms var(--ease), visibility 0s linear 220ms;
+  }
+
+  .sidebar.is-open {
+    visibility: visible;
+    transform: none;
+    transition: transform 220ms var(--ease);
+  }
+
+  .icon-btn.sidebar__close {
+    display: inline-grid;
+  }
+
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: block;
+    background: rgb(24 24 27 / 0.4);
+  }
+
+  .topbar {
+    padding: 0 var(--s-4) 0 var(--s-2);
+    gap: var(--s-1);
+  }
+
+  .icon-btn.topbar__menu {
+    display: inline-grid;
+  }
+
+  .offline {
+    padding: var(--s-3) var(--s-4);
+    align-items: flex-start;
+  }
+
+
+  .view--new {
+    padding: var(--s-8) var(--s-4) var(--s-12);
+  }
+
+  .page {
+    padding: var(--s-6) var(--s-4) var(--s-12);
+  }
+}
+
+@media (max-width: 40rem) {
+  .new__title {
+    font-size: var(--t-xl);
+    line-height: 2rem;
+  }
+
+  /* On a phone the intro pushed the first field half a screen down. */
+  .new__lead {
+    margin-top: var(--s-2);
+    font-size: var(--t-base);
+    line-height: 1.25rem;
+  }
+
+  .form {
+    margin-top: var(--s-5);
+  }
+
+  .form {
+    gap: var(--s-5);
+    padding: var(--s-5);
+  }
+
+  .form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .choices {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .choice--wide,
+  .choice--other {
+    grid-column: span 2;
+  }
+
+  .choice span {
+    height: var(--control-h-lg);
+  }
+
+  /* On a phone the fields stack and the button goes last, after the options,
+     so nothing below it gets missed. */
+  .form {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .searchbar {
+    display: contents;
+  }
+
+  .searchbar__go {
+    order: 10;
+    padding-top: 0;
+  }
+
+  .searchbar__go .btn {
+    width: 100%;
+  }
+
+  .form__status {
+    order: 11;
+    margin-top: 0;
+  }
+
+  .option__hint {
+    display: block;
+    margin: 2px 0 0;
+  }
+
+  .page__actions {
+    width: 100%;
+  }
+
+  .page__actions .btn--lead {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .page__actions .btn:not(.btn--lead):not(.btn--icon) {
+    flex: 1;
+  }
+
+  .toolbar__search {
+    flex-basis: 100%;
+  }
+
+  .stat {
+    padding: var(--s-3) var(--s-4) var(--s-5);
+  }
+
+  /* Two columns are too narrow for icon plus label on one line, and a
+     wrapped label pushes its number out of line with its neighbour. */
+  .stat__label .icon {
+    display: none;
+  }
+
+  .meter {
+    right: var(--s-4);
+    left: var(--s-4);
+  }
+
+  /* The table becomes a list of labelled records; scrolling a five-column
+     grid sideways on a phone hides the contact details that matter. */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  .table tbody tr {
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .table td {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: var(--s-3);
+    padding: var(--s-1) 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    font-size: var(--t-xs);
+    line-height: 1.25rem;
+    color: var(--text-3);
+  }
+
+  .table {
+    min-width: 0;
+  }
+
+  .table colgroup {
+    display: none;
+  }
+
+  .filter {
+    height: var(--control-h-lg);
+    padding: 0 var(--s-4);
+  }
+
+  /* 16px text stops iOS zooming the page when the field takes focus. */
+  .toolbar__search .input {
+    height: var(--control-h-lg);
+    font-size: var(--t-md);
+  }
+
+  .page__delete {
+    margin-right: 0;
+  }
+
+  .table td.cell-name {
+    display: block;
+    padding-bottom: var(--s-2);
+  }
+
+  .table td.cell-clip {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .table td.cell-name::before {
+    content: none;
+  }
+
+  .skeleton-row td::before {
+    content: none;
+  }
+
+  .toasts {
+    right: var(--s-4);
+    bottom: var(--s-4);
+    left: var(--s-4);
+    justify-items: stretch;
+  }
+
+  .dialog__actions {
+    flex-direction: column-reverse;
+  }
+}

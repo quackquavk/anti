@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-20T00:00:00Z",
+  "title": "Design System: Maps Lead List",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Working Indigo",
+        "canonical": "#4f46e5",
+        "tonalRamp": [
+          "#1e1b4b",
+          "#312e81",
+          "#3730a3",
+          "#4338ca",
+          "#4f46e5",
+          "#a5b4fc",
+          "#c7d2fe",
+          "#eef2ff"
+        ]
+      },
+      "rail": {
+        "role": "secondary",
+        "displayName": "Deep Indigo Rail",
+        "canonical": "#1e1b4b",
+        "tonalRamp": [
+          "#0f0d2a",
+          "#1e1b4b",
+          "#312e81",
+          "#4338ca",
+          "#6366f1",
+          "#b4bcfb",
+          "#e0e7ff",
+          "#eef2ff"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#18181b",
+          "#3f3f46",
+          "#52525b",
+          "#a1a1aa",
+          "#d4d4d8",
+          "#e4e4e7",
+          "#f4f4f5",
+          "#ffffff"
+        ]
+      },
+      "tint": {
+        "role": "neutral",
+        "displayName": "Indigo-Tinted Paper",
+        "canonical": "#f6f7fe",
+        "tonalRamp": [
+          "#1e1b4b",
+          "#4338ca",
+          "#6366f1",
+          "#a5b4fc",
+          "#c7d2fe",
+          "#e0e7ff",
+          "#eef2ff",
+          "#f6f7fe"
+        ]
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Done Green",
+        "canonical": "#15803d",
+        "tonalRamp": [
+          "#14532d",
+          "#166534",
+          "#15803d",
+          "#16a34a",
+          "#4ade80",
+          "#bbf7d0",
+          "#f0fdf4",
+          "#f7fef9"
+        ]
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Caution Amber",
+        "canonical": "#b45309",
+        "tonalRamp": [
+          "#78350f",
+          "#92400e",
+          "#b45309",
+          "#d97706",
+          "#fbbf24",
+          "#fde68a",
+          "#fffbeb",
+          "#fffdf5"
+        ]
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Error Red",
+        "canonical": "#b91c1c",
+        "tonalRamp": [
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#f87171",
+          "#fecaca",
+          "#fef2f2",
+          "#fff8f8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "New-search page title only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Search page title, stat values, page empty state."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Dialog titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default text, table cells, field labels."
+      },
+      "body-lg": {
+        "displayName": "Body Large",
+        "purpose": "Lead text, large inputs, mobile inputs."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Filters, chips, hints, breadcrumbs."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Table headers, badges, rail meta."
+      }
+    },
+    "shadows": [
+      {
+        "name": "control",
+        "value": "0 1px 2px rgb(24 24 27 / 0.05)",
+        "purpose": "Buttons, inputs, choice buttons."
+      },
+      {
+        "name": "card",
+        "value": "0 1px 2px rgb(24 24 27 / 0.06), 0 1px 3px rgb(24 24 27 / 0.08)",
+        "purpose": "New-search form card."
+      },
+      {
+        "name": "float",
+        "value": "0 4px 6px -2px rgb(24 24 27 / 0.05), 0 12px 32px -8px rgb(24 24 27 / 0.18)",
+        "purpose": "Dialog, toasts, mobile drawer."
+      },
+      {
+        "name": "focus-halo",
+        "value": "0 0 0 3px #c7d2fe",
+        "purpose": "Input focus ring."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "All state transitions."
+      },
+      {
+        "name": "fast",
+        "value": "150ms",
+        "purpose": "Hover, focus, selection."
+      },
+      {
+        "name": "breathe",
+        "value": "2s ease-in-out infinite",
+        "purpose": "Live dot and badge."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stats-2up",
+        "value": "64rem"
+      },
+      {
+        "name": "drawer",
+        "value": "56rem"
+      },
+      {
+        "name": "mobile",
+        "value": "40rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one loud action per screen.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Find businesses</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 12px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:#18181b;font:500 14px/1 Inter,system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgb(24 24 27 / 0.05);transition:background-color 150ms cubic-bezier(0.16,1,0.3,1),border-color 150ms cubic-bezier(0.16,1,0.3,1)} .ds-btn-primary{background:#4f46e5;border-color:#4f46e5;color:#fff} .ds-btn-primary:hover{background:#4338ca;border-color:#4338ca} .ds-btn-primary:active{background:#3730a3;border-color:#3730a3} .ds-btn:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Default button for Stop, Download alternatives and dialog cancel.",
+      "html": "<button class=\"ds-btn2\">Stop</button>",
+      "css": ".ds-btn2{height:36px;padding:0 12px;border:1px solid #e4e4e7;border-radius:8px;background:#fff;color:#18181b;font:500 14px/1 Inter,system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgb(24 24 27 / 0.05);transition:background-color 150ms,border-color 150ms} .ds-btn2:hover{background:#f4f4f5;border-color:#d4d4d8} .ds-btn2:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "36px field with indigo focus halo.",
+      "html": "<input class=\"ds-input\" placeholder=\"e.g. dentists\">",
+      "css": ".ds-input{width:240px;height:36px;padding:0 12px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;color:#18181b;font:400 14px Inter,system-ui,sans-serif;box-shadow:0 1px 2px rgb(24 24 27 / 0.05);transition:border-color 150ms,box-shadow 150ms} .ds-input::placeholder{color:#6b6b74} .ds-input:hover{border-color:#a1a1aa} .ds-input:focus{outline:none;border-color:#4f46e5;box-shadow:0 0 0 3px #c7d2fe}"
+    },
+    {
+      "name": "Segmented Choice",
+      "kind": "custom",
+      "refersTo": "choice-selected",
+      "description": "Radio drawn as a button; checked is a tinted wash, not solid.",
+      "html": "<span class=\"ds-choice\">50</span> <span class=\"ds-choice ds-on\">100</span>",
+      "css": ".ds-choice{display:inline-grid;place-items:center;width:72px;height:44px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;font:500 16px Inter,system-ui,sans-serif;box-shadow:0 1px 2px rgb(24 24 27 / 0.05);transition:background-color 150ms,border-color 150ms} .ds-choice:hover{border-color:#a5b4fc;background:#eef2ff} .ds-on{border-color:#4f46e5;background:#eef2ff;color:#3730a3;font-weight:600;box-shadow:inset 0 0 0 1px #4f46e5}"
+    },
+    {
+      "name": "Filter Toggle",
+      "kind": "chip",
+      "refersTo": "filter-pill",
+      "description": "Pill toggle with a live count; pressed is indigo wash.",
+      "html": "<button class=\"ds-filter\">Has email <span class=\"ds-n\">42</span></button> <button class=\"ds-filter ds-pressed\" aria-pressed=\"true\">Has phone <span class=\"ds-n\">88</span></button>",
+      "css": ".ds-filter{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid #e4e4e7;border-radius:999px;background:#fff;color:#52525b;font:500 13px Inter,system-ui,sans-serif;cursor:pointer;transition:background-color 150ms,border-color 150ms,color 150ms} .ds-filter:hover{border-color:#d4d4d8;background:#f4f4f5;color:#18181b} .ds-n{font-weight:400;color:#6b6b74;font-variant-numeric:tabular-nums} .ds-pressed{border-color:#4f46e5;background:#eef2ff;color:#3730a3;box-shadow:inset 0 0 0 1px #4f46e5} .ds-pressed .ds-n{color:#4338ca} .ds-filter:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "sidebar",
+      "description": "Deep indigo rail with two-line search items and status dots.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav ds-cur\"><i class=\"ds-dot ds-live\"></i><span><b>Dentists</b><small>Austin, 120 found</small></span></a><a class=\"ds-nav\"><i class=\"ds-dot ds-ok\"></i><span><b>Bakeries</b><small>Leeds, 64 found</small></span></a></nav>",
+      "css": ".ds-rail{display:grid;gap:2px;width:272px;padding:12px;background:#1e1b4b;border-radius:8px;font-family:Inter,system-ui,sans-serif;font-size:14px} .ds-nav{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:8px;border-radius:8px;color:#eef2ff;text-decoration:none;transition:background-color 150ms} .ds-nav:hover{background:rgb(255 255 255 / 0.07)} .ds-cur{background:rgb(255 255 255 / 0.14);color:#fff} .ds-nav b{display:block;font-weight:500} .ds-nav small{display:block;font-size:12px;line-height:16px;color:#b4bcfb} .ds-dot{width:8px;height:8px;margin-top:6px;border-radius:50%;background:rgb(255 255 255 / 0.35)} .ds-live{background:#a5b4fc;box-shadow:0 0 0 3px rgb(165 180 252 / 0.3)} .ds-ok{background:#4ade80}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-live",
+      "description": "24px pill with a leading dot; tint pairs per status.",
+      "html": "<span class=\"ds-badge ds-b-live\">Running</span> <span class=\"ds-badge ds-b-ok\">Done</span> <span class=\"ds-badge ds-b-warn\">Stopped</span> <span class=\"ds-badge ds-b-bad\">Error</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 10px;border-radius:999px;background:#f4f4f5;color:#52525b;font:500 12px Inter,system-ui,sans-serif} .ds-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor} .ds-b-live{background:#eef2ff;color:#4338ca} .ds-b-ok{background:#f0fdf4;color:#15803d} .ds-b-warn{background:#fffbeb;color:#b45309} .ds-b-bad{background:#fef2f2;color:#b91c1c}"
+    },
+    {
+      "name": "Stat Strip",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Four summary numbers in one bordered strip with a progress meter.",
+      "html": "<div class=\"ds-stats\"><div class=\"ds-stat\"><span>Found</span><strong>120</strong><i class=\"ds-meter\"><b></b></i></div><div class=\"ds-stat\"><span>With email</span><strong>74</strong></div></div>",
+      "css": ".ds-stats{display:grid;grid-template-columns:1fr 1fr;width:360px;border:1px solid #e4e4e7;border-radius:12px;background:#fff;font-family:Inter,system-ui,sans-serif} .ds-stat{position:relative;padding:16px 20px 20px;border-left:1px solid #e4e4e7} .ds-stat:first-child{border-left:0} .ds-stat span{display:block;font-size:13px;color:#52525b} .ds-stat strong{display:block;margin-top:4px;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums} .ds-meter{position:absolute;left:20px;right:20px;bottom:8px;height:3px;border-radius:999px;background:#f4f4f5;overflow:hidden} .ds-meter b{display:block;width:60%;height:100%;background:#4f46e5}"
+    },
+    {
+      "name": "Results Table",
+      "kind": "custom",
+      "refersTo": "table-head",
+      "description": "Fixed-layout table with tinted header and hairline rows.",
+      "html": "<div class=\"ds-tc\"><table class=\"ds-table\"><thead><tr><th>Name</th><th>Phone</th><th>Rating</th></tr></thead><tbody><tr><td>Oak Dental<small>Dentist</small></td><td>(512) 555-0100</td><td>4.8</td></tr><tr><td>Bright Smiles<small>Dentist</small></td><td>(512) 555-0142</td><td>4.6</td></tr></tbody></table></div>",
+      "css": ".ds-tc{overflow:hidden;width:480px;border:1px solid #e4e4e7;border-radius:12px;background:#fff;font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:20px} .ds-table{width:100%;table-layout:fixed;border-collapse:collapse;font-variant-numeric:tabular-nums} .ds-table th{height:40px;padding:0 16px;border-bottom:1px solid #e4e4e7;background:#f6f7fe;font-size:12px;font-weight:500;color:#52525b;text-align:left} .ds-table td{padding:12px 16px;border-bottom:1px solid #f4f4f5;vertical-align:top} .ds-table td small{display:block;margin-top:2px;font-size:12px;line-height:16px;color:#6b6b74} .ds-table tbody tr:last-child td{border-bottom:0} .ds-table tbody tr:hover{background:#fafafa}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Ledger",
+    "overview": "A calm work tool where the list is the product. The system is deliberately standard: familiar components, hairline borders, a strict 8px spacing grid, one indigo brand on zinc neutrals. Nothing performs; the table of businesses and the Download button carry the screen. Colour was added at the user's request after a first monochrome pass read as too black-and-white, and it landed as a deep indigo shell plus a single indigo accent, not as a rainbow.\n\nDensity is moderate and professional: 14px body text, 36px controls, 32px page gutters, a 288px sidebar and a 720px centred form on a faint indigo tint. Depth is soft and low. Selection, live state and links share one hue so colour always means \"this is the active or actionable thing\".\n\nThe system rejects the dark-gradient \"scraper dashboard\": no exposed engine settings, no raw logs on the main path, no decorative gradients.",
+    "keyCharacteristics": [
+      "One indigo brand; deep indigo sidebar as the shell; zinc neutrals everywhere else.",
+      "Status colours (green, amber, red) only for status; violet, teal and amber only as the stat icons.",
+      "Inter throughout, fixed rem scale, tabular numerals for counts and table cells.",
+      "8px control radius, 12px container radius, 1px hairline borders, soft low shadows.",
+      "One loud element per screen, checked by squint test: Find businesses on the form, Download CSV on a search."
+    ],
+    "rules": [
+      {
+        "name": "The Meaning-of-Colour Rule",
+        "body": "Indigo means active, selected, live or primary action; green, amber and red mean status and nothing else. A colour that is not doing one of those jobs becomes zinc.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Loud Thing Rule",
+        "body": "Each screen has exactly one solid indigo button. Selection is tinted (wash fill, indigo border), never solid, so it cannot compete with the submit action. On the rail, the primary button is demoted to a translucent white fill for the same reason.",
+        "section": "colors"
+      },
+      {
+        "name": "The Link Scarcity Rule",
+        "body": "Links take the link colour on hover only in the table; email alone is the link-coloured column, so the table does not read as a wall of blue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Numbers that change or align (stat values, table, counts, choices) use tabular numerals.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight-Not-Size Rule",
+        "body": "Step up a level with weight and tracking before adding a new size; the scale is fixed (12, 13, 14, 16, 18, 24, 30px).",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline-First Rule",
+        "body": "The stat strip, table card and advanced panel get a 1px border and no shadow; only the form card and floating layers lift. Pressed buttons drop their shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every margin, padding and gap from the spacing scale (4, 8, 12, 16, 20, 24, 32, 40, 48, 64px).",
+      "Do keep exactly one solid indigo button per screen and show selection as an indigo wash with an indigo border.",
+      "Do reserve green, amber and red for status, and use zinc for anything that is neither status nor active.",
+      "Do use 8px radius for controls and 12px for containers; pills only for chips, filters and badges.",
+      "Do keep table columns fixed-width and use tabular numerals so streaming rows never shift the row being read.",
+      "Do state the row count in the Download button label and put live counts in filter toggles.",
+      "Do use 44px targets and 16px input text on mobile."
+    ],
+    "donts": [
+      "Don't use gradients, dark dashboard chrome or raw engine logs on the main path.",
+      "Don't add a second accent hue; violet, teal and amber exist only as the stat icons.",
+      "Don't use uppercase, tracked-out small labels or other eyebrow styling; group labels are sentence-case 12px.",
+      "Don't make selected choices or filters solid indigo, and don't colour more than one table column as a link.",
+      "Don't add hard offset shadows or side-stripe borders; lift with the soft shadow vocabulary only.",
+      "Don't add text to the sidebar primary action that makes it louder than the page's own primary action."
+    ]
+  }
+}

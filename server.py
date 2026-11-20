@@ -7,6 +7,7 @@ import threading
 import shutil
 import json
 import os
+import re
 import io
 import pandas as pd
 
@@ -26,6 +27,15 @@ jobs_collection = db["jobs"]
 # Track active job threads
 active_jobs = {}
 
+# Each running job is a headless Chromium in a container. On a small box two at
+# once is the practical limit, so extra jobs wait their turn as "pending" and
+# the UI tells the user they are queued instead of the server swapping itself
+# to death.
+MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
+job_slots = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
+
+MAX_TOTAL = 10000
+
 # Statuses that only a live worker thread can move forward. If the process dies
 # -- restart, deploy, crash, OOM -- jobs sat in these forever and the UI showed
 # them as running indefinitely.
@@ -42,7 +52,11 @@ def reconcile_interrupted_jobs():
     result = jobs_collection.update_many(
         {"status": {"$in": list(NON_TERMINAL_STATUSES)}},
         {
-            "$set": {"status": "interrupted", "updated_at": datetime.now(timezone.utc)},
+            "$set": {
+                "status": "interrupted",
+                "updated_at": datetime.now(timezone.utc),
+                "finished_at": datetime.now(timezone.utc),
+            },
             "$push": {
                 "logs": {
                     "$each": [
@@ -88,6 +102,10 @@ def update_job_status(job_id, status, results_count=None, error=None):
         update["results_count"] = results_count
     if error is not None:
         update["error"] = error
+    if status == "running":
+        update["started_at"] = update["updated_at"]
+    elif status in ("completed", "stopped", "error"):
+        update["finished_at"] = update["updated_at"]
     
     jobs_collection.update_one(
         {"_id": ObjectId(job_id)},
@@ -107,6 +125,50 @@ def save_job_results(job_id, results):
         }
     )
 
+def append_job_result(job_id, result):
+    """Add one result to the job.
+
+    A $push keeps each write the size of one place. Rewriting the whole array
+    per result made a 5,000-place job send megabytes to Mongo for every place.
+    """
+    jobs_collection.update_one(
+        {"_id": ObjectId(job_id)},
+        {
+            "$push": {"results": result},
+            "$inc": {"results_count": 1},
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        },
+    )
+
+
+def set_job_notice(job_id, message, title=None):
+    """Store a plain-language note for the person who started the search."""
+    jobs_collection.update_one(
+        {"_id": ObjectId(job_id)},
+        {"$set": {
+            "notice": message,
+            "notice_title": title,
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
+
+
+def job_status(job_id):
+    job = jobs_collection.find_one({"_id": ObjectId(job_id)}, {"status": 1})
+    return job.get("status") if job else None
+
+
+def wait_for_slot(job_id):
+    """Block until this job may run. False if it was cancelled while queued."""
+    while not job_slots.acquire(timeout=2):
+        if job_status(job_id) != "pending":
+            return False
+    if job_status(job_id) != "pending":
+        job_slots.release()
+        return False
+    return True
+
+
 def run_scraper(job_id, config):
     """Run one scrape job via the gosom scraper and stream results into Mongo."""
 
@@ -118,7 +180,7 @@ def run_scraper(job_id, config):
     def result_cb(result, current_count, total):
         # The runner already deduped on place_id, so every result here is new.
         all_results.append(result)
-        save_job_results(job_id, all_results)
+        append_job_result(job_id, result)
 
     def is_job_active():
         job = jobs_collection.find_one(
@@ -130,7 +192,15 @@ def run_scraper(job_id, config):
         log_callback=log_cb,
         result_callback=result_cb,
         is_active=is_job_active,
+        notice_callback=lambda message, title=None: set_job_notice(job_id, message, title),
+        place_callback=lambda name: jobs_collection.update_one(
+            {"_id": ObjectId(job_id)}, {"$set": {"matched_place": name}}
+        ),
     )
+
+    if not wait_for_slot(job_id):
+        active_jobs.pop(job_id, None)
+        return
 
     try:
         update_job_status(job_id, "running")
@@ -153,8 +223,8 @@ def run_scraper(job_id, config):
         update_job_status(job_id, "error", len(all_results), error=str(e))
 
     finally:
-        if job_id in active_jobs:
-            del active_jobs[job_id]
+        job_slots.release()
+        active_jobs.pop(job_id, None)
 
 
 def run_job_thread(job_id, config):
@@ -163,9 +233,60 @@ def run_job_thread(job_id, config):
 
 # Routes
 
+def _asset_version():
+    """Newest mtime under static/, so a deploy busts cached CSS and JS."""
+    newest = 0
+    for root, _, files in os.walk(app.static_folder):
+        for name in files:
+            newest = max(newest, int(os.path.getmtime(os.path.join(root, name))))
+    return newest
+
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", asset_v=_asset_version())
+
+
+def clean_config(raw):
+    """Validate a job config. Returns (config, errors keyed by field)."""
+    config = dict(raw)
+    errors = {}
+
+    query = str(raw.get("search_query") or "").strip()
+    location = str(raw.get("location") or "").strip()
+    if not query:
+        errors["search_query"] = "Enter the kind of business you are looking for."
+    elif len(query) > 120:
+        errors["search_query"] = "Keep this under 120 characters."
+    if len(location) > 120:
+        errors["location"] = "Keep this under 120 characters."
+
+    try:
+        total = int(raw.get("total", 100))
+    except (TypeError, ValueError):
+        total = 0
+    if not 1 <= total <= MAX_TOTAL:
+        errors["total"] = f"Choose a number between 1 and {MAX_TOTAL:,}."
+
+    # Optional tuning knobs: drop anything unusable so the runner's own
+    # defaults apply instead of crashing the job on a bad number.
+    for key, cast, low, high in (
+        ("grid_cell_km", float, 0.2, 20.0),
+        ("zoom_level", int, 10, 21),
+    ):
+        if key in config:
+            try:
+                value = cast(config[key])
+                if not low <= value <= high:
+                    raise ValueError
+                config[key] = value
+            except (TypeError, ValueError):
+                config.pop(key)
+
+    config.update(search_query=query, location=location, total=total)
+    if "email" in config:
+        config["email"] = bool(config["email"])
+    return config, errors
 
 @app.route("/api/jobs", methods=["GET"])
 def list_jobs():
@@ -175,7 +296,13 @@ def list_jobs():
     if user_id:
         query["user_id"] = user_id
         
-    jobs = list(jobs_collection.find(query).sort("created_at", -1).limit(50))
+    # The list view only shows status and counts. Shipping results and logs
+    # here made each poll ~14 MB, which got the Atlas cluster throttled.
+    jobs = list(
+        jobs_collection.find(query, {"results": 0, "logs": 0})
+        .sort("created_at", -1)
+        .limit(50)
+    )
     for job in jobs:
         job["_id"] = str(job["_id"])
     return jsonify(jobs)
@@ -183,13 +310,20 @@ def list_jobs():
 @app.route("/api/jobs", methods=["POST"])
 def create_job():
     """Create and start a new scraping job."""
-    data = request.json
+    data = request.get_json(silent=True) or {}
     config = data.get("config", {})
     # Support direct config passed as body or wrapped in "config" key
     if not config and "search_query" in data:
-        config = data
-    
+        config = {k: v for k, v in data.items() if k != "user_id"}
+
     user_id = data.get("user_id")
+
+    config, errors = clean_config(config)
+    if errors:
+        return jsonify({
+            "error": next(iter(errors.values())),
+            "fields": errors,
+        }), 400
     
     # Create job document
     job = {
@@ -221,8 +355,8 @@ def create_job():
 # thumbnails, open_hours and review breakdowns, which are wasteful to ship on a
 # 3-second poll but still available from the unslimmed endpoint and the CSV.
 SLIM_RESULT_FIELDS = (
-    "name", "phone", "email", "category", "city", "rating",
-    "review_count", "location_link",
+    "name", "phone", "email", "website", "category", "city", "address",
+    "rating", "review_count", "location_link",
 )
 
 
@@ -231,15 +365,34 @@ def get_job(job_id):
     """Get single job details.
 
     Pass ?slim=1 to trim each result to the fields the UI displays.
+    Pass ?since=N to get only results from index N on. Results are append-only,
+    so a client that already holds N of them never re-downloads the list.
     """
     try:
-        job = jobs_collection.find_one({"_id": ObjectId(job_id)})
+        since = max(0, request.args.get("since", default=0, type=int) or 0)
+        oid = ObjectId(job_id)
+
+        if since:
+            # Two small reads instead of one large one: the job without its
+            # results, then only the tail the client is missing. Only the
+            # "results" key is read from the second, so it does not matter
+            # whether a server treats a bare $slice as inclusion or exclusion.
+            job = jobs_collection.find_one({"_id": oid}, {"results": 0})
+            if job:
+                tail = jobs_collection.find_one(
+                    {"_id": oid}, {"results": {"$slice": [since, MAX_TOTAL]}}
+                )
+                job["results"] = (tail or {}).get("results", [])
+        else:
+            job = jobs_collection.find_one({"_id": oid})
+
         if not job:
             return jsonify({"error": "Job not found"}), 404
         job["_id"] = str(job["_id"])
 
         results = job.get("results", [])
-        job["has_results"] = len(results) > 0
+        job["results_offset"] = since
+        job["has_results"] = (job.get("results_count") or 0) > 0 or len(results) > 0
 
         if request.args.get("slim") and results:
             job["results"] = [
@@ -262,10 +415,55 @@ def stop_job(job_id):
             update_job_status(job_id, "stopping")
             log_to_job(job_id, "Stop requested by user")
             return jsonify({"message": "Stop requested"})
+        elif job.get("status") == "pending":
+            # Still queued: nothing to wind down, so it is stopped right away.
+            update_job_status(job_id, "stopped", 0)
+            log_to_job(job_id, "Cancelled before it started")
+            return jsonify({"message": "Cancelled"})
         else:
             return jsonify({"message": "Job is not running"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+def filter_results(results, args):
+    """Apply the UI's list filters, so a download matches what is on screen."""
+    needle = (args.get("q") or "").strip().lower()
+    want_email = bool(args.get("has_email"))
+    want_phone = bool(args.get("has_phone"))
+    want_website = bool(args.get("has_website"))
+    min_rating = args.get("min_rating", type=float)
+
+    def keep(r):
+        if want_email and not r.get("email"):
+            return False
+        if want_phone and not r.get("phone"):
+            return False
+        if want_website and not r.get("website"):
+            return False
+        if min_rating is not None and (r.get("rating") or 0) < min_rating:
+            return False
+        if needle:
+            haystack = " ".join(
+                str(r.get(k) or "")
+                for k in ("name", "category", "city", "address", "phone",
+                          "email", "website")
+            ).lower()
+            if needle not in haystack:
+                return False
+        return True
+
+    return [r for r in results if keep(r)]
+
+
+def export_filename(job, filtered):
+    """'dentists-austin-tx.csv' tells the user what is in the file; an id does not."""
+    config = job.get("config") or {}
+    label = f"{config.get('search_query') or ''} {config.get('location') or ''}"
+    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:80]
+    if not slug:
+        slug = f"job-{job['_id']}"
+    return f"{slug}{'-filtered' if filtered else ''}.csv"
+
 
 @app.route("/api/jobs/<job_id>/export", methods=["GET"])
 def export_job_csv(job_id):
@@ -276,9 +474,11 @@ def export_job_csv(job_id):
             return jsonify({"error": "Job not found"}), 404
         
         results = job.get("results", [])
+        total = len(results)
+        results = filter_results(results, request.args)
         if not results:
             return jsonify({"error": "No results to export"}), 404
-        
+
         df = pd.DataFrame(results)
 
         # Lead the export with the columns people actually act on, then append
@@ -289,11 +489,19 @@ def export_job_csv(job_id):
 
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False)
-        
+        body = csv_buffer.getvalue()
+
+        # Excel only reads UTF-8 correctly when the file starts with a BOM;
+        # without it accented business names turn to mojibake. Opt-in, so API
+        # consumers that parse the CSV themselves see no change.
+        if request.args.get("excel"):
+            body = "\ufeff" + body
+
+        filename = export_filename(job, filtered=len(results) < total)
         return Response(
-            csv_buffer.getvalue(),
-            mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=job_{job_id}.csv"}
+            body,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 400

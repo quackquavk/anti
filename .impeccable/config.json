@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-20T13:53:43.660Z",
+        "reason": "agent decided: Inter is the deliberate workhorse UI face for an Operate surface; user asked for professional standard components"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "templates/index.html"
+        ],
+        "createdAt": "2026-11-20T13:53:43.680Z",
+        "reason": "agent decided: false positive, detector cannot resolve the Jinja url_for stylesheet so it never sees app.css where h1 is 30px/24px over 14px body"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "sf mono",
+        "createdAt": "2026-11-20T14:00:40.963Z",
+        "reason": "agent decided: system monospace stack is used only for the collapsed activity log, which is machine output"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "templates/index.html"
+        ],
+        "createdAt": "2026-11-20T14:07:57.169Z",
+        "reason": "agent decided: false positive, the detector cannot load the Jinja-linked stylesheet so it sees browser-default black; real colours live in app.css and pass"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "0.1875rem",
+        "createdAt": "2026-11-20T14:18:38.660Z",
+        "reason": "agent decided: 3px corner on the 14px filter checkbox; the 6px scale step would turn it into a blob"
+      }
+    ]
+  }
+}

@@ -69,8 +69,15 @@ MAX_GRID_CELL_KM = 5.0
 class GmapsRunner:
     """Runs one scrape job as a child process."""
 
-    def __init__(self, log_callback=None, result_callback=None, is_active=None):
+    def __init__(self, log_callback=None, result_callback=None, is_active=None,
+                 notice_callback=None, place_callback=None):
         self.log = log_callback or print
+        # For things the person who started the search should know and can act
+        # on, worded for them. The log stays the technical record.
+        self.notify = notice_callback or (lambda message, title=None: None)
+        # Told which real-world place the location text resolved to, so the UI
+        # can show it and a wrong match is caught early.
+        self.on_place = place_callback or (lambda name: None)
         self.on_result = result_callback
         # Called between polls; return False to abort the run.
         self.is_active = is_active or (lambda: True)
@@ -288,14 +295,27 @@ class GmapsRunner:
                 f"unanchored search, which may return results near the server "
                 f"rather than the requested area."
             )
+            self.notify(
+                f"We could not find \u201c{location}\u201d on the map, so some "
+                f"results may come from the wrong area. Check the spelling or "
+                f"try a nearby city.",
+                title="We could not find this place on the map",
+            )
             return None
 
         bbox = place["bbox"]
         self.log(f"  Matched: {place['display_name']}")
+        self.on_place(place["display_name"])
 
         def anchored(reason=None):
             if reason:
                 self.log(reason)
+                self.notify(
+                    f"\u201c{location}\u201d is too large to cover in full, so "
+                    f"this list stops at about {SINGLE_SEARCH_CEILING} "
+                    f"businesses. Search one city at a time to get more.",
+                    title="This area is too large to cover in full",
+                )
             width, height = geocode.bbox_dimensions_km(bbox)
             zoom = geocode.zoom_for_span(max(width, height))
             radius = geocode.radius_for_span(max(width, height))
