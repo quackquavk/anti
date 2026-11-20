@@ -49,6 +49,9 @@ def lookup(location, timeout=20):
         "q": location.strip(),
         "format": "json",
         "limit": 1,
+        # The matched place name is shown to the user. Without this Nominatim
+        # answers in the local language and script.
+        "accept-language": "en",
     })
     req = urllib.request.Request(
         f"{NOMINATIM_URL}?{params}",
