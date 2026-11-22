@@ -1979,6 +1979,29 @@ tr.is-new {
   color: var(--text-2);
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.pager__label {
+  font-size: var(--t-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Paging lands with the column headers clear of the sticky top bar. */
+#resultsTable {
+  scroll-margin-top: 4.5rem;
+}
+
+#resultsBody.is-loading {
+  opacity: 0.55;
+  transition: opacity 120ms linear 120ms;
+}
+
 .tech__body {
   margin-top: var(--s-3);
   padding: var(--s-4);

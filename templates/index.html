@@ -305,7 +305,11 @@
                   <div class="table-foot__actions">
                     <a class="btn btn--ghost btn--sm" id="downloadAll" download hidden></a>
                     <button class="btn btn--sm" type="button" id="newRows" hidden></button>
-                    <button class="btn btn--sm" type="button" id="showMore" hidden>Show more</button>
+                    <nav class="pager" id="pager" aria-label="Pages" hidden>
+                      <button class="btn btn--sm" type="button" id="pagePrev">Previous</button>
+                      <span class="pager__label" id="pageLabel"></span>
+                      <button class="btn btn--sm" type="button" id="pageNext">Next</button>
+                    </nav>
                   </div>
                 </div>
               </div>

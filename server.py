@@ -1,4 +1,5 @@
 from flask import Flask, render_template, jsonify, request, Response
+from werkzeug.datastructures import MultiDict
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
@@ -10,7 +11,8 @@ import json
 import os
 import re
 import io
-import pandas as pd
+import csv
+import gzip
 
 from scraper.gmaps_runner import GmapsRunner
 from scraper.normalize import CSV_COLUMNS
@@ -36,6 +38,9 @@ MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
 job_slots = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
 
 MAX_TOTAL = 10000
+RESULTS_PAGE_SIZE = 100
+MAX_RESULTS_PAGE_SIZE = 500
+EXPORT_BATCH_SIZE = 250
 
 # Statuses that only a live worker thread can move forward. If the process dies
 # -- restart, deploy, crash, OOM -- jobs sat in these forever and the UI showed
@@ -442,6 +447,148 @@ def get_job(job_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+def results_filter(args):
+    """The list filters as a MongoDB condition on one result."""
+    conditions = []
+    for param, field in (("has_email", "email"), ("has_phone", "phone"), ("has_website", "website")):
+        if args.get(param):
+            conditions.append({field: {"$nin": [None, ""]}})
+    min_rating = args.get("min_rating", type=float)
+    if min_rating is not None:
+        conditions.append({"rating": {"$gte": min_rating}})
+    needle = (args.get("q") or "").strip()
+    if needle:
+        pattern = {"$regex": re.escape(needle), "$options": "i"}
+        conditions.append({"$or": [
+            {k: pattern} for k in ("name", "category", "city", "address", "phone", "email", "website")
+        ]})
+    return {"$and": conditions} if conditions else {}
+
+
+def results_sort_stages(key, direction):
+    """Sort with blanks last in either direction, ties in the order found."""
+    if key not in SLIM_RESULT_FIELDS:
+        return [{"$sort": {"i": 1}}]
+    value = f"${key}"
+    sort_value = value if key in ("rating", "review_count") else {"$toLower": {"$ifNull": [value, ""]}}
+    return [
+        {"$addFields": {
+            "_blank": {"$cond": [{"$eq": [{"$ifNull": [value, ""]}, ""]}, 1, 0]},
+            "_sort": sort_value,
+        }},
+        {"$sort": {"_blank": 1, "_sort": direction, "i": 1}},
+    ]
+
+
+def read_results_page(oid, args, page, per_page):
+    """One page, its matching total and the summary, in one database read.
+
+    Atlas delivers about 100 KB/s here, so the filtering, sorting and counting
+    happen there and only the rows on screen cross the network.
+    """
+    row_fields = {k: f"$results.{k}" for k in SLIM_RESULT_FIELDS}
+    rows_base = []
+    upto = args.get("upto", type=int)
+    if upto is not None:
+        rows_base.append({"$match": {"i": {"$lt": max(0, upto)}}})
+    match = results_filter(args)
+    if match:
+        rows_base.append({"$match": match})
+
+    def has(field):
+        return {"$cond": [{"$gt": [{"$ifNull": [f"${field}", ""]}, ""]}, 1, 0]}
+
+    rating = {"$ifNull": ["$rating", 0]}
+    direction = -1 if args.get("dir") == "desc" else 1
+
+    def run(skip):
+        return next(jobs_collection.aggregate([
+            {"$match": {"_id": oid}},
+            {"$project": {"_id": 0, "results": 1}},
+            {"$unwind": {"path": "$results", "includeArrayIndex": "i"}},
+            {"$project": {"i": 1, **row_fields}},
+            {"$facet": {
+                "rows": rows_base + results_sort_stages(args.get("sort"), direction) + [
+                    {"$skip": skip},
+                    {"$limit": per_page},
+                    {"$project": {"_blank": 0, "_sort": 0}},
+                ],
+                "matching": rows_base + [{"$count": "n"}],
+                "stats": [{"$group": {
+                    "_id": None,
+                    "total": {"$sum": 1},
+                    "email": {"$sum": has("email")},
+                    "phone": {"$sum": has("phone")},
+                    "website": {"$sum": has("website")},
+                    "rated": {"$sum": {"$cond": [{"$gt": [rating, 0]}, 1, 0]}},
+                    "rated4": {"$sum": {"$cond": [{"$gte": [rating, 4]}, 1, 0]}},
+                    "rating_sum": {"$sum": rating},
+                }}],
+            }},
+        ]), None)
+
+    data = run((page - 1) * per_page)
+    if data is None:  # no results array entries at all
+        return [], 0, 1, None
+    total = data["matching"][0]["n"] if data["matching"] else 0
+    last = max(1, (total + per_page - 1) // per_page)
+    if page > last:  # the list got shorter, or a stale link
+        page = last
+        data = run((page - 1) * per_page)
+    stats = data["stats"][0] if data["stats"] else None
+    if stats:
+        stats.pop("_id", None)
+    return data["rows"], total, page, stats
+
+
+@app.route("/api/jobs/<job_id>/results", methods=["GET"])
+def get_job_results(job_id):
+    """The job plus one page of its list.
+
+    Query: page, per_page, sort, dir (asc|desc), has_email, has_phone,
+    has_website, min_rating, q, and upto (only consider the first N results,
+    which holds a sorted list still while a search adds to it).
+    """
+    try:
+        oid = ObjectId(job_id)
+        job = jobs_collection.find_one({"_id": oid}, {"results": 0})
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        job["_id"] = str(job["_id"])
+        if job.get("status") == "pending":
+            job["queue_ahead"] = queue_ahead(job["_id"])
+
+        page = max(1, request.args.get("page", default=1, type=int) or 1)
+        per_page = request.args.get("per_page", default=RESULTS_PAGE_SIZE, type=int) or RESULTS_PAGE_SIZE
+        per_page = min(max(1, per_page), MAX_RESULTS_PAGE_SIZE)
+
+        rows, total, page, stats = read_results_page(oid, request.args, page, per_page)
+        return jsonify({
+            "job": job, "rows": rows, "total": total,
+            "page": page, "per_page": per_page, "stats": stats,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.after_request
+def compress_json(response):
+    """nginx here only gzips HTML, so large JSON is compressed by the app."""
+    if (
+        response.mimetype == "application/json"
+        and response.status_code == 200
+        and not response.direct_passthrough
+        and "gzip" in request.headers.get("Accept-Encoding", "")
+        and "Content-Encoding" not in response.headers
+    ):
+        body = response.get_data()
+        if len(body) >= 1024:
+            response.set_data(gzip.compress(body, 5))
+            response.headers["Content-Encoding"] = "gzip"
+            response.headers.add("Vary", "Accept-Encoding")
+    return response
+
+
 @app.route("/api/jobs/<job_id>/stop", methods=["POST"])
 def stop_job(job_id):
     """Request job to stop."""
@@ -504,41 +651,68 @@ def export_filename(job, filtered):
     return f"{slug}{'-filtered' if filtered else ''}.csv"
 
 
+def iter_result_batches(oid):
+    """Read a job's full results a slice at a time."""
+    skip = 0
+    while True:
+        doc = next(jobs_collection.aggregate([
+            {"$match": {"_id": oid}},
+            {"$project": {"_id": 0, "batch": {"$slice": ["$results", skip, EXPORT_BATCH_SIZE]}}},
+        ]), None)
+        batch = (doc or {}).get("batch") or []
+        if batch:
+            yield batch
+        if len(batch) < EXPORT_BATCH_SIZE:
+            return
+        skip += EXPORT_BATCH_SIZE
+
+
+def csv_text(rows, columns, header=False):
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+    if header:
+        writer.writeheader()
+    writer.writerows(rows)
+    return out.getvalue()
+
+
 @app.route("/api/jobs/<job_id>/export", methods=["GET"])
 def export_job_csv(job_id):
-    """Export job results as CSV."""
+    """Export job results as CSV, streamed so a large list cannot time out."""
     try:
-        job = jobs_collection.find_one({"_id": ObjectId(job_id)})
+        oid = ObjectId(job_id)
+        job = jobs_collection.find_one({"_id": oid}, {"results": 0, "logs": 0})
         if not job:
             return jsonify({"error": "Job not found"}), 404
-        
-        results = job.get("results", [])
-        total = len(results)
-        results = filter_results(results, request.args)
-        if not results:
+        job["_id"] = str(job["_id"])
+
+        args = request.args.to_dict()
+        batches = iter_result_batches(oid)
+        first = []
+        for batch in batches:  # hold the response until there is a row to send
+            first = filter_results(batch, request.args)
+            if first:
+                break
+        if not first:
             return jsonify({"error": "No results to export"}), 404
 
-        df = pd.DataFrame(results)
+        # Lead with the columns people act on, then anything else returned.
+        seen = list(dict.fromkeys(k for r in first for k in r))
+        columns = [c for c in CSV_COLUMNS if c in seen] + [c for c in seen if c not in CSV_COLUMNS]
 
-        # Lead the export with the columns people actually act on, then append
-        # anything else the scraper returned.
-        ordered = [c for c in CSV_COLUMNS if c in df.columns]
-        ordered += [c for c in df.columns if c not in ordered]
-        df = df[ordered]
+        filter_args = MultiDict(args)
 
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        body = csv_buffer.getvalue()
+        def generate():
+            yield ("\ufeff" if args.get("excel") else "") + csv_text(first, columns, header=True)
+            for batch in batches:
+                rows = filter_results(batch, filter_args)
+                if rows:
+                    yield csv_text(rows, columns)
 
-        # Excel only reads UTF-8 correctly when the file starts with a BOM;
-        # without it accented business names turn to mojibake. Opt-in, so API
-        # consumers that parse the CSV themselves see no change.
-        if request.args.get("excel"):
-            body = "\ufeff" + body
-
-        filename = export_filename(job, filtered=len(results) < total)
+        filtered = any(args.get(k) for k in ("has_email", "has_phone", "has_website", "min_rating", "q"))
+        filename = export_filename(job, filtered=filtered)
         return Response(
-            body,
+            generate(),
             mimetype="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )

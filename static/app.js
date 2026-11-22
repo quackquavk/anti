@@ -10,7 +10,7 @@
   // Anything this high means "as many as possible", so a percentage or an
   // "x of y" would be noise.
   const OPEN_ENDED_FROM = 9999;
-  const PAGE_SIZE = 200;
+  const PAGE_SIZE = 100;
   const PREFS_KEY = "gms.prefs.v1";
 
   const LIST_PAGE = 50;
@@ -19,12 +19,15 @@
     jobs: null, // sidebar list, without results
     route: { name: "new", id: null },
     job: null, // the open search
-    results: [],
+    results: [], // the rows of the current page only
+    total: 0, // rows matching the filters, across all pages
+    stats: null, // summary of the whole search, from the server
+    rev: 0, // bumps whenever a new page arrives
     seen: 0, // rows already shown once, so only new ones highlight
     filters: { email: false, phone: false, website: false, rated: false },
     query: "",
     sort: { key: null, dir: 1 },
-    limit: PAGE_SIZE,
+    page: 1,
     shown: null, // when set, only this many results are listed (see heldCount)
     prevStatus: new Map(),
     finishedWhileAway: null,
@@ -418,48 +421,20 @@
     return null;
   }
 
-  function matches(r) {
-    const f = state.filters;
-    if (f.email && !r.email) return false;
-    if (f.phone && !r.phone) return false;
-    if (f.website && !r.website) return false;
-    if (f.rated && !((r.rating || 0) >= 4)) return false;
-    if (state.query) {
-      const hay = `${r.name || ""} ${r.category || ""} ${r.city || ""} ${r.address || ""} ${r.phone || ""} ${r.email || ""} ${r.website || ""}`.toLowerCase();
-      if (!hay.includes(state.query)) return false;
-    }
-    return true;
-  }
-
   const filtersActive = () => Object.values(state.filters).some(Boolean) || Boolean(state.query);
 
   // While a search is still running and the list is sorted, new businesses
   // would land in the middle and push the row being read out from under the
   // eye. They are held back instead, and the reader lets them in.
-  const heldCount = () => (state.shown === null ? 0 : Math.max(0, state.results.length - state.shown));
+  const heldCount = () => (state.shown === null || !state.job ? 0 : Math.max(0, (state.job.results_count || 0) - state.shown));
 
-  function visibleRows() {
-    const base = state.shown === null ? state.results : state.results.slice(0, state.shown);
-    let rows = base.map((r, i) => ({ r, i })).filter(({ r }) => matches(r));
-    const { key, dir } = state.sort;
-    if (key) {
-      const value = (r) => {
-        const v = r[key];
-        if (v === null || v === undefined || v === "") return null;
-        return key === "rating" ? Number(v) : String(v).toLowerCase();
-      };
-      rows.sort((a, b) => {
-        const x = value(a.r);
-        const y = value(b.r);
-        if (x === null && y === null) return a.i - b.i;
-        if (x === null) return 1; // blanks always last
-        if (y === null) return -1;
-        if (x < y) return -dir;
-        if (x > y) return dir;
-        return a.i - b.i;
-      });
-    }
-    return rows;
+  function filterParams(params) {
+    if (state.filters.email) params.set("has_email", "1");
+    if (state.filters.phone) params.set("has_phone", "1");
+    if (state.filters.website) params.set("has_website", "1");
+    if (state.filters.rated) params.set("min_rating", "4");
+    if (state.query) params.set("q", state.query);
+    return params;
   }
 
   const NONE = '<span class="cell-none" aria-label="None">–</span>';
@@ -521,7 +496,7 @@
     const body = $("resultsBody");
     const scroll = document.querySelector(".table-scroll");
     const foot = $("tableFoot");
-    const n = state.results.length;
+    const n = job ? job.results_count || 0 : 0;
 
     // Still fetching this search: show the shape of what is coming.
     if (!job) {
@@ -561,7 +536,7 @@
         body.innerHTML = skeletonRows(5);
         scroll.hidden = false;
         foot.hidden = false;
-        $("showMore").hidden = true;
+        $("pager").hidden = true;
         $("listSummary").textContent = "Looking for the first businesses. This can take a few minutes.";
         setEmpty(null);
       } else if (job.status === "completed") {
@@ -581,12 +556,10 @@
     // nothing is left waiting.
     if (state.shown !== null && (!state.sort.key || (!ACTIVE.has(job.status) && state.shown >= n))) state.shown = null;
     const held = heldCount();
-    const rows = visibleRows();
-    const key = [n, held, JSON.stringify(state.filters), state.query, state.sort.key, state.sort.dir, state.limit, job.status].join("|");
+    const key = [state.rev, held, job.status].join("|");
     if (key !== cache.table) {
       cache.table = key;
-      const shown = rows.slice(0, state.limit);
-      const html = shown.map(rowHtml).join("");
+      const html = state.results.map((r) => rowHtml({ r, i: r.i })).join("");
       if (html !== cache.rows) {
         // Untouched rows are left alone, so a text selection or a hover
         // survives a poll that brought nothing new into view.
@@ -599,10 +572,10 @@
       newRows.hidden = held === 0;
       if (held) newRows.textContent = `Show ${fmt(held)} new ${plural(held, "business", "businesses")}`;
 
-      scroll.hidden = rows.length === 0;
-      foot.hidden = rows.length === 0;
+      scroll.hidden = state.total === 0;
+      foot.hidden = state.total === 0;
 
-      if (rows.length === 0) {
+      if (state.total === 0) {
         setEmpty("No businesses match these filters", "Try removing a filter or changing your search text.", {
           label: "Clear filters",
           run: clearFilters,
@@ -612,25 +585,28 @@
       }
 
       const visibleTotal = n - held;
-      let summary = filtersActive() ? `${fmt(rows.length)} of ${businesses(visibleTotal)} match your filters` : businesses(visibleTotal);
-      if (shown.length < rows.length) summary += ` · first ${fmt(shown.length)} shown`;
-      $("listSummary").textContent = summary;
+      const from = (state.page - 1) * PAGE_SIZE + 1;
+      const to = from + state.results.length - 1;
+      const range = state.total > state.results.length ? `${fmt(from)}–${fmt(to)} of ` : "";
+      $("listSummary").textContent = filtersActive()
+        ? `${range}${fmt(state.total)} matching, from ${businesses(visibleTotal)}`
+        : `${range}${businesses(state.total)}`;
 
-      const more = $("showMore");
-      const remaining = rows.length - shown.length;
-      more.hidden = remaining <= 0;
-      if (remaining > 0) more.textContent = `Show ${fmt(Math.min(PAGE_SIZE, remaining))} more`;
+      const pages = Math.max(1, Math.ceil(state.total / PAGE_SIZE));
+      $("pager").hidden = pages <= 1;
+      $("pageLabel").textContent = `Page ${fmt(state.page)} of ${fmt(pages)}`;
+      $("pagePrev").disabled = state.page <= 1;
+      $("pageNext").disabled = state.page >= pages;
     }
 
     // The file always holds everything found, including rows held back above.
-    const matching = held ? state.results.filter(matches).length : rows.length;
-    renderDownload(matching, n);
+    renderDownload(held && filtersActive() ? null : held ? n : state.total, n);
   }
 
   function renderDownload(matching, total) {
     const btn = $("downloadBtn");
     const label = $("downloadLabel");
-    if (!state.job || matching === 0) {
+    if (!state.job || matching === 0 || total === 0) {
       btn.setAttribute("aria-disabled", "true");
       btn.removeAttribute("href");
       btn.removeAttribute("download");
@@ -638,23 +614,20 @@
       $("downloadAll").hidden = true;
       return;
     }
-    const params = new URLSearchParams({ excel: "1" });
-    if (state.filters.email) params.set("has_email", "1");
-    if (state.filters.phone) params.set("has_phone", "1");
-    if (state.filters.website) params.set("has_website", "1");
-    if (state.filters.rated) params.set("min_rating", "4");
-    if (state.query) params.set("q", state.query);
+    const params = filterParams(new URLSearchParams({ excel: "1" }));
     btn.href = `/api/jobs/${state.job._id}/export?${params}`;
     btn.setAttribute("download", "");
     btn.setAttribute("aria-disabled", "false");
     // The button always says how many rows the file will hold.
-    label.textContent = `Download ${fmt(matching)} as CSV`;
-    btn.title = matching < total ? "Downloads only the businesses that match your filters" : "";
+    // Unknown only while new rows are held back behind active filters.
+    label.textContent = matching === null ? "Download matches as CSV" : `Download ${fmt(matching)} as CSV`;
+    const narrowed = matching === null || matching < total;
+    btn.title = narrowed ? "Downloads only the businesses that match your filters" : "";
 
     // Filtering the list should never trap someone into a filtered file.
     const all = $("downloadAll");
-    all.hidden = matching >= total;
-    if (matching < total) {
+    all.hidden = !narrowed;
+    if (narrowed) {
       all.href = `/api/jobs/${state.job._id}/export?excel=1`;
       all.textContent = `Download all ${fmt(total)} instead`;
     }
@@ -662,25 +635,15 @@
 
   function renderStats() {
     const job = state.job;
-    const res = state.results;
-    const n = job ? Math.max(job.results_count || 0, res.length) : 0;
-    let email = 0;
-    let phone = 0;
-    let website = 0;
-    let rated4 = 0;
-    let rated = 0;
-    let ratingSum = 0;
-    for (const r of res) {
-      if (r.email) email += 1;
-      if (r.phone) phone += 1;
-      if (r.website) website += 1;
-      if (r.rating) {
-        rated += 1;
-        ratingSum += Number(r.rating);
-        if (r.rating >= 4) rated4 += 1;
-      }
-    }
-    const pct = (k) => (res.length ? `${Math.round((k / res.length) * 100)}%` : "");
+    const s = state.stats || {};
+    const n = job ? job.results_count || 0 : 0;
+    const email = s.email || 0;
+    const phone = s.phone || 0;
+    const website = s.website || 0;
+    const rated4 = s.rated4 || 0;
+    const rated = s.rated || 0;
+    const ratingSum = s.rating_sum || 0;
+    const pct = (k) => (s.total ? `${Math.round((k / s.total) * 100)}%` : "");
 
     $("stFound").textContent = fmt(n);
     const meter = $("stMeter");
@@ -735,7 +698,7 @@
       return;
     }
 
-    const n = Math.max(job.results_count || 0, state.job ? state.results.length : 0);
+    const n = (job.results_count || 0);
     const nothing = job.status === "completed" && !n;
     const [label, cls, icon] = nothing ? ["Nothing found", "", "i-minus"] : BADGES[job.status] || [job.status, "", "i-minus"];
     badge.hidden = false;
@@ -835,7 +798,7 @@
     clearTimeout(scrollTimer);
     if (state.route.name !== "search" || !state.job || state.restoreY !== null) return;
     try {
-      sessionStorage.setItem(scrollKey(state.route.id), JSON.stringify({ y: Math.round(window.scrollY), limit: state.limit }));
+      sessionStorage.setItem(scrollKey(state.route.id), JSON.stringify({ y: Math.round(window.scrollY), page: state.page }));
     } catch {
       /* storage unavailable */
     }
@@ -844,7 +807,7 @@
   function loadScroll(id) {
     try {
       const v = JSON.parse(sessionStorage.getItem(scrollKey(id)));
-      if (v && v.y > 0) return v;
+      if (v && (v.y > 0 || v.page > 1)) return v;
     } catch {
       /* ignore */
     }
@@ -885,48 +848,62 @@
     }
   }
 
+  let detailSeq = 0;
+
   async function refreshDetail(force) {
-    if (state.route.name !== "search" || detailBusy || pendingDeletes.has(state.route.id)) return;
-    if (!force && state.job && !ACTIVE.has(state.job.status)) return;
+    if (state.route.name !== "search" || pendingDeletes.has(state.route.id)) return;
+    if (!force && (detailBusy || (state.job && !ACTIVE.has(state.job.status)))) return;
 
     const id = state.route.id;
-    const since = state.job ? state.results.length : 0;
+    // A newer request (a click on a filter or page) replaces any in flight.
+    const seq = ++detailSeq;
     detailBusy = true;
+    $("resultsBody").classList.toggle("is-loading", Boolean(force && state.job));
+    const params = filterParams(new URLSearchParams({ page: state.page, per_page: PAGE_SIZE }));
+    if (state.sort.key) {
+      params.set("sort", state.sort.key);
+      params.set("dir", state.sort.dir === 1 ? "asc" : "desc");
+    }
+    if (state.shown !== null) params.set("upto", state.shown);
     try {
-      const job = await api(`/api/jobs/${id}?slim=1&since=${since}`);
-      if (state.route.name !== "search" || state.route.id !== id) return; // user moved on
+      const data = await api(`/api/jobs/${id}/results?${params}`);
+      if (seq !== detailSeq || state.route.name !== "search" || state.route.id !== id) return; // superseded
 
-      const incoming = job.results || [];
-      delete job.results;
       const first = !state.job;
-
-      if ((job.results_count || 0) < since) {
-        // The list shrank under us (re-run on the server): start over.
-        state.job = null;
-        state.results = [];
-        state.seen = 0;
-        detailBusy = false;
-        return refreshDetail(true);
-      }
-      if ((job.results_offset || 0) === state.results.length) {
-        for (const r of incoming) state.results.push(r);
-      }
-      state.job = job;
-      if (first) state.seen = state.results.length; // nothing is "new" on open
-      state.prevStatus.set(job._id, job.status);
+      const pageChanged = data.page !== state.page;
+      state.job = data.job;
+      state.results = data.rows;
+      state.total = data.total;
+      state.stats = data.stats;
+      state.page = data.page;
+      state.rev += 1;
+      if (first || pageChanged) state.seen = data.job.results_count || 0; // nothing is "new" on open
+      state.prevStatus.set(data.job._id, data.job.status);
       renderSearch();
       if (first && state.restoreY !== null) {
         window.scrollTo(0, state.restoreY);
         state.restoreY = null;
       }
     } catch (err) {
+      if (seq !== detailSeq) return;
       state.restoreY = null;
       if (err.status === 404 || err.status === 400) {
         if (state.route.id === id) showMissing();
+      } else if (force && state.job) {
+        toast("Could not load that page. Try again.");
       }
     } finally {
-      detailBusy = false;
+      if (seq === detailSeq) {
+        detailBusy = false;
+        $("resultsBody").classList.remove("is-loading");
+      }
     }
+  }
+
+  // Filters, sort and paging are answered by the server.
+  function reloadList() {
+    renderSearch();
+    return refreshDetail(true);
   }
 
   // --------------------------------------------------------------- polling
@@ -957,17 +934,17 @@
   function clearFilters() {
     state.filters = { email: false, phone: false, website: false, rated: false };
     state.query = "";
-    state.limit = PAGE_SIZE;
+    state.page = 1;
     $("listSearch").value = "";
-    renderSearch();
+    reloadList();
   }
 
   for (const btn of document.querySelectorAll(".filter")) {
     btn.addEventListener("click", () => {
       const name = btn.dataset.filter;
       state.filters[name] = !state.filters[name];
-      state.limit = PAGE_SIZE;
-      renderSearch();
+      state.page = 1;
+      reloadList();
     });
   }
 
@@ -978,16 +955,23 @@
     clearTimeout(searchDebounce);
     const value = e.target.value.trim().toLowerCase();
     searchDebounce = setTimeout(() => {
+      if (value === state.query) return;
       state.query = value;
-      state.limit = PAGE_SIZE;
-      renderSearch();
-    }, 120);
+      state.page = 1;
+      reloadList();
+    }, 250);
   });
 
-  $("showMore").addEventListener("click", () => {
-    state.limit += PAGE_SIZE;
-    renderSearch();
-  });
+  function goToPage(page) {
+    state.page = page;
+    reloadList().then(() => {
+      document.querySelector(".table-scroll").scrollTop = 0;
+      $("resultsTable").scrollIntoView({ block: "start" });
+    });
+  }
+
+  $("pagePrev").addEventListener("click", () => goToPage(Math.max(1, state.page - 1)));
+  $("pageNext").addEventListener("click", () => goToPage(state.page + 1));
 
   for (const th of document.querySelectorAll("th[data-sort]")) {
     th.querySelector("button").addEventListener("click", () => {
@@ -998,14 +982,15 @@
       else if (state.sort.dir === firstDir) state.sort = { key, dir: -firstDir };
       else state.sort = { key: null, dir: 1 };
       const live = state.job && ACTIVE.has(state.job.status);
-      state.shown = state.sort.key && live ? state.results.length : null;
-      renderSearch();
+      state.shown = state.sort.key && live ? state.job.results_count || 0 : null;
+      state.page = 1;
+      reloadList();
     });
   }
 
   $("newRows").addEventListener("click", () => {
-    state.shown = state.job && ACTIVE.has(state.job.status) && state.sort.key ? state.results.length : null;
-    renderSearch();
+    state.shown = state.job && ACTIVE.has(state.job.status) && state.sort.key ? state.job.results_count || 0 : null;
+    reloadList();
   });
 
   // One confirmation dialog for the two things that cannot be taken back.
@@ -1036,7 +1021,7 @@
   $("stopBtn").addEventListener("click", () => {
     const job = state.job;
     if (!job) return;
-    const n = Math.max(job.results_count || 0, state.results.length);
+    const n = (job.results_count || 0);
     const ranFor = Date.now() - new Date(job.started_at || job.created_at).getTime();
     // A stopped search cannot be resumed. Past the first couple of minutes a
     // stray click would throw away real waiting time, so ask first.
@@ -1086,7 +1071,7 @@
       toast(`Deleted “${titleOf(job)}”.`, { label: "Undo", run: () => undoDelete(job) }, () => commitDelete(job));
       return;
     }
-    const n = Math.max(job.results_count || 0, state.results.length);
+    const n = (job.results_count || 0);
     confirmAction(
       {
         title: "Delete this search?",
@@ -1459,12 +1444,14 @@
       if (changed || !state.job) {
         state.job = null;
         state.results = [];
+        state.total = 0;
+        state.stats = null;
         state.seen = 0;
-        state.limit = PAGE_SIZE;
+        state.page = 1;
         state.shown = null;
         const place = returning ? loadScroll(next.id) : null;
         if (place) {
-          state.limit = Math.max(PAGE_SIZE, Number(place.limit) || PAGE_SIZE);
+          state.page = Math.max(1, Number(place.page) || 1);
           state.restoreY = place.y;
         }
         const saved = loadView(next.id);
